@@ -50,11 +50,6 @@ cd path/to/parent/repo
 git clone https://github.com/sealad886/ollama_util.git .
 ```
 
-Make sure that `ollamautil.py` is executable:
-```bash
-chmod +x ollamautil.py
-```
-
 To be able to run this at the command line like any other utility, create an alias. Note that I am using
 `python3` as my invoking command, but yours might allow `python` or some other variation.
 ```
