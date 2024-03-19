@@ -13,7 +13,10 @@ Whenever the cache or a part of it is migrated, the sha256 checksum is calculate
 (i.e. after copy) and the utility will not continue until the user decides to keep or 
 delete the corrupted data. 
 
-Other
+## Before you start
+
+This technique relies on creating a symlink at `$HOME/.ollama/models` that can toggle between
+your internal and external caches. Make sure you're okay with that.
 
 ## Getting Started
 
@@ -25,12 +28,15 @@ install and configure environments and what to install will be forthcoming in fu
 Describe any prerequisites, libraries, OS version, etc., needed before installing program.
 * Install Ollama [Ollama.com](https://ollama.com/download) or on [GitHub](https://github.com/ollama/ollama)
 
-### Installing
+Stop any active Ollama processes currently running. 
 
-This depends on the [mlx-community](https://huggingface.io/mlx-community) and specifically the Whisper scripts written for 
-[mlx-]
-* How/where to download your program
-* Any modifications needed to be made to files/folders
+To start, move your current cache to a new directory, then symlink to the new location, as in this example:
+```bash
+mv $HOME/.ollama/models $HOME/ollama_internal/models/
+ln -s -F $HOME/ollama_internal/models $HOME/.ollama/
+```
+
+### Installing
 
 In your base environment, or in the environment of your choosing, install a couple of basic reqs:
 ```bash
@@ -97,6 +103,15 @@ Pay close attention to the single- and double-quotes when configuring this or it
 ## Help
 
 * When setting up the environment variables: Pay close attention to the single- and double-quotes when configuring this or it will break. 
+
+## TODO
+
+1. Check if Ollama models are running / active before allowing any part of the utility to run.
+1. Finish the remove_from_cache() method.
+1.1. This is different from the `ollama rm` tool because it will enable you to remove from either the internal or external cache without having to switch over. 
+1. Develop wrapper function for other commands in `ollama` CLI (e.g. enable `ollama pull` to store to either cache)
+1. Eventually, maybe even have so much wrapper around this that ollama wouldn't know which cache you used for which models. The user could be presented with all models in the internal/external cache, and then the invoking method could figure out how to handle the symlinks. 
+1.1. Only potential issue here would be that you could only have one model running at any given time. 
 
 ## Authors
 
