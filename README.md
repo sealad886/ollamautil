@@ -47,7 +47,7 @@ Decide where you'll download this script. It should be a unique folder for this 
 ```bash
 mkdir -p path/to/parent/repo/
 cd path/to/parent/repo
-git clone https://github.com/sealad886/ollamautil.git .
+git clone https://github.com/sealad886/ollama_util.git .
 ```
 
 Make sure that `ollamautil.py` is executable:
