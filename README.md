@@ -112,6 +112,7 @@ Pay close attention to the single- and double-quotes when configuring this or it
 1. Develop wrapper function for other commands in `ollama` CLI (e.g. enable `ollama pull` to store to either cache)
 1. Eventually, maybe even have so much wrapper around this that ollama wouldn't know which cache you used for which models. The user could be presented with all models in the internal/external cache, and then the invoking method could figure out how to handle the symlinks. 
 1.1. Only potential issue here would be that you could only have one model running at any given time. 
+1. Tab-completion in zsh.
 
 ## Authors
 
@@ -144,3 +145,7 @@ GitHub: [github.com/sealad886](https://github.com/sealad886)
 
 ## Acknowledgments
 
+I will note that portions of this code were analyzed and edits suggested by various LLMs, including:
+* OpenAI ChatGPT-4
+* wizardcoder (7B and 34B-Python models)
+* Mystral 
