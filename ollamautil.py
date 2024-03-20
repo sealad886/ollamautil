@@ -1,11 +1,14 @@
 #!/user/bin/python3
+# To make this executable, update shebang to your python interpreter
+# then CHMOD +x ollamautil.py and put it in your PATH. Optionally
+# remove .py from the filename.
 # ---------------------------
 # OllamaUtil
+#
 # A CLI utility for working with and moving the Ollama cache
 # Currently has certain configurations hard-coded for my own setup
 # but easily adaptable to a configuraiton file.
 # Current as of the cache file structure of Ollama 0.1.29.
-#
 #
 # ---------------------------
 #    Copyright 2024 - Andrew M. Cox
@@ -392,42 +395,60 @@ def remove_from_cache() -> None:
         print(f'Option not yet implemented. Please remove files from internal and external caches separately.')
 
 def ftStr(word: str) -> str:
-    opt = "\033[1;4m" + word[0] + "\033[0m\033[1m" + word[1:] + "\033[0m"
+    '''
+    Helper function to format a string as such:
+        first letter: bold and underlined
+        rest of string: bold only
+    In this use case, to be used to indicate to shell user which additional
+    text inputs are valid options in a menu selection.
+
+    Input:
+        word: (Required) str - a string of 
+    '''
+    word = word.strip()
+    if word == "":
+        return ""
+    opt = "\033[1;4m" + word[0] + "\033[0m"
+    if len(word) > 1:
+        opt += "\033[1m" + word[1:] + "\033[0m"
     return opt
 
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
-    print(f"1. {ftStr("Copy")} Cache")
-    print(f"2. {ftStr("Toggle")} Ollama Int/Ext Cache")
-    print(f"3. {ftStr("Remove")} from cache")
-    print(f"4. {ftStr("Quit")}")
+    print(f"1. {ftStr('Copy')} Cache")
+    print(f"2. {ftStr('Toggle')} Ollama Int/Ext Cache")
+    print(f"3. {ftStr('Remove')} from cache")
+    print(f"4. {ftStr('Quit')}")
     choice = input("Select: ")
     return choice
 
 def process_choice(choice: str, combined, models_table: PrettyTable|None = None):
     choice = choice.lower()
     if choice in ['1', 'c', 'copy']:
-        print(f"{ftStr("Copy")} cache: migrate files between internal and external cache folders.")
+        print(f"{ftStr('Copy')} cache: migrate files between internal and external cache folders.")
         migrate_cache(models_table, combined)
     elif choice in ['2', 't', 'toggle']:
-        print(f"{ftStr("Toggle")} Ollama Int/Ext Cache: Swtich between internal and external cache folders.")
+        print(f"{ftStr('Toggle')} Ollama Int/Ext Cache: Swtich between internal and external cache folders.")
         toggle_int_ext_cache(combined=combined, table=models_table)
     elif choice in ['3', 'r', 'remove']:
-        print(f"{ftStr("Remove")} from cache: remove one or more model/tag from internal or external cache.")
+        print(f"{ftStr('Remove')} from cache: remove one or more model/tag from internal or external cache.")
         remove_from_cache()
     elif choice in ['4', 'q', 'quit']:
-        print(f"{ftStr("Quit")} utility, exiting...")
+        print(f"{ftStr('Quit')} utility, exiting...")
         exit()
     else:
         print("Invalid choice, please try again.")
 
-def main(combined: list) -> None:
+def main() -> None:
+    '''
+    Display main menu and basic high-level handling.
+    '''
+    _, _, combined = build_ext_int_comb_filelist()
+
     # Assuming 'combined' is your list of models and weights
-    # build the table once since that's going to be the most resource-intense
-    # repetitive task
-    models_table = display_models_table(combined)
-    
     while True:
+        # re-build the table every time you return to the main menu
+        models_table = display_models_table(combined)
         choice = main_menu()
         process_choice(choice, combined, models_table=models_table)
 
@@ -451,6 +472,5 @@ if __name__ == "__main__":
             "These are required to be configured before invoking this utility."))
         AssertionError("Environment variables not configured correctly. Unable to run utility.")
     FILE_LIST_IGNORE = ollama_file_ignore
-    _, _, combined = build_ext_int_comb_filelist()
 
-    main(combined)
+    main()
