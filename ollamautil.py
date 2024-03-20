@@ -443,11 +443,10 @@ def main() -> None:
     '''
     Display main menu and basic high-level handling.
     '''
-    _, _, combined = build_ext_int_comb_filelist()
-
     # Assuming 'combined' is your list of models and weights
     while True:
         # re-build the table every time you return to the main menu
+        _, _, combined = build_ext_int_comb_filelist()
         models_table = display_models_table(combined)
         choice = main_menu()
         process_choice(choice, combined, models_table=models_table)
