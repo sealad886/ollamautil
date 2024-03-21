@@ -55,8 +55,8 @@ def display_models_table(combined: List[List], table: PrettyTable|None = None):
 
 def get_models_table(combined: List[List], table: PrettyTable|None = None):
     if not table:
-        table = PrettyTable(['Model', 'Tag', 'External', 'Internal'],
-                        title="Ollama GPTs Installed (External/Internal)",
+        table = PrettyTable(['Lib', 'Model', 'Tag', 'External', 'Internal'],
+                        title="Ollama GPTs Installed",
                         left_padding_width=3, 
                         right_padding_width=2,
                         vertical_align_char='c',
@@ -70,7 +70,11 @@ def get_models_table(combined: List[List], table: PrettyTable|None = None):
         for weight in all_weights:
             exists_in_external = "Yes" if weight in external_weights else "No"
             exists_in_internal = "Yes" if weight in internal_weights else "No"
-            table_rows.append([model_name, weight, exists_in_external, exists_in_internal])
+            table_rows.append([model_name.split(os.sep)[-2], 
+                               model_name.split(os.sep)[-1],
+                               weight, 
+                               exists_in_external, 
+                               exists_in_internal])
 
     # Sort rows by model name and then by weight for consistency
     table_rows.sort(key=lambda x: (x[0], x[1]))
@@ -95,10 +99,20 @@ def build_ext_int_comb_filelist() -> Tuple[dict, dict, list]:
     external_files = walk_dir(ollama_ext_dir + "/manifests")
     internal_files = walk_dir(ollama_int_dir + "/manifests")
 
-    # Process files into model: [weights] mapping
-    external_models = [e.split("/")[-2:] for e in external_files]
-    internal_models = [i.split("/")[-2:] for i in internal_files]
+    def process_files(files):
+        models_dict = {}
+        for file_path in files:
+            # Adjusted to accommodate additional directory layers
+            parts = file_path.split("/")[-4:]  # This will select superparent/parent/model/weight
+            dict_key = "/".join(parts[:-1])  # superparent/parent/model as key
+            models_dict.setdefault(dict_key, []).append(parts[-1])  # Append weight
+        return models_dict
 
+    # Process files into model: [weights] mapping
+    external_dict = process_files(external_files)
+    internal_dict = process_files(internal_files)
+
+    '''
     external_dict = {}
     for e in external_models:
         external_dict.setdefault(e[0], []).append(e[1])
@@ -106,6 +120,7 @@ def build_ext_int_comb_filelist() -> Tuple[dict, dict, list]:
     internal_dict = {}
     for i in internal_models:
         internal_dict.setdefault(i[0], []).append(i[1])
+    '''
 
     combined = []
 
@@ -143,7 +158,7 @@ def get_user_confirmation(prompt):
 
 
 def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
-    current_path = os.path.realpath("/Users/andrew/.ollama/models")
+    current_path = os.path.realpath("~/.ollama/models")
     if current_path == ollama_int_dir:
         curnow = "internal"
     elif current_path == ollama_ext_dir:
@@ -153,9 +168,9 @@ def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
     
     table = display_models_table(combined=combined, table=table)
     print("Review which models are available in which cache carefully.\n\n")
-    if get_user_confirmation("Would you like to move ALL cache files? (Note: will not overwrite existing repos)"):
+    if get_user_confirmation("Would you like to move cache files first? (Note: will not overwrite existing files): "):
         direction = '1' if curnow == "external" else '0'
-        migrate_cache_args(direction, False, ['all'])
+        migrate_cache(table=table, combined=combined, bypassGetAll=True, which_direction=direction, overwrite=False)
 
     print(f"Current Ollama cache set to: {curnow.upper()}.")
     user_conf = get_user_confirmation("Would you like to swap symlink the other source? (yN): ")
@@ -197,7 +212,7 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
             else:
                 ints = user_input
             for i in ints:
-                selected_files.append(table._rows[int(i)-1][1:])
+                selected_files.append(table._rows[int(i)-1][1:-2])
         except ValueError:
             print("Invalid input. Please enter numbers separated by commas.")
             continue
@@ -207,66 +222,28 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
             continue  # Prompt the user to select again if multiple selections are not allowed
         
         return selected_files
-    
-def migrate_cache_args(direction: str|int, overwrite: bool=False, selected_models: list=['all']) -> None:
-    '''
-    To be completely honest, I'm not sure if this one works yet.
 
-    Returns:
-        None
-    '''
-    external_dict, internal_dict, combined = build_ext_int_comb_filelist()
-    table = get_models_table(combined)
-    # Assuming selected_models is a list of tuples or lists, like [('model1', 'latest'), ('model2', 'version')]
-    selected_models=select_models(table, bypassGetAll=True)
-    sel_dirfil = [f"{model[0]}/{model[1]}" for model in selected_models]
-    if not selected_models:
-        print("No models selected. Quitting...")
-        return
-
-    # Define source and destination directories based on the direction
-    source_dir, dest_dir = (ollama_ext_dir, ollama_int_dir) if direction == '1' else (ollama_int_dir, ollama_ext_dir)
-
-    source_files = []
-    for file_path in walk_dir(os.path.join(source_dir, "manifests")):
-        normalized_path = os.path.normpath(file_path)
-        path_segments = normalized_path.split(os.sep)[-2:]
-        dir_file_combination = '/'.join(path_segments)
-        if dir_file_combination in sel_dirfil:
-            source_files.append(file_path)
-
-    
-    for source_file in source_files:
-        dest_file = os.path.join(dest_dir, '/'.join(source_file.split('/models/')[1:]))
-        os.makedirs(os.path.dirname(dest_file), exist_ok=True)
-
-        if overwrite or not os.path.exists(dest_file):
-            with tqdm(total=os.stat(source_file).st_size, unit='B', unit_scale=True, desc=f"Copying {os.path.basename(dest_file)}") as pbar:
-                with open(source_file, 'rb') as src, open(dest_file, 'wb') as dst:
-                    for chunk in iter(lambda: src.read(4096), b""):
-                        dst.write(chunk)
-                        pbar.update(len(chunk))
-            print(f"Copied {source_file} to {dest_file}")
-
-        copy_blob_files(source_file=source_file, dest_file=dest_file, source_dir=source_dir, dest_dir=dest_dir, overwrite=overwrite)
-        os.system(f"ollama pull {':'.join(os.path.normpath(source_file).split(os.sep)[-2:])}")
-
-
-def migrate_cache(table: PrettyTable|None = None, combined: list = []) -> None:
+def migrate_cache_user(table, combined):
     if combined == []:
         external_dict, internal_dict, combined = build_ext_int_comb_filelist()
     source_files = []
     if table is None:
         table = display_models_table(combined)
 
-    selected_files = select_models(table, None, True)
-    sel_dirfil = [f"{tmpvar[0]}/{tmpvar[1]}" for tmpvar in selected_files]
+    selected_files = select_models(table, None, True, bypassGetAll=False)
     if selected_files == []:
         print("No models selected. Quitting...")
         return
-
+        
     which_direction = input("Move from:\n(1) external to internal\n(2) internal to external\n(1 or 2): ")
     overwrite = input("If the model already exists, should it be overwritten? (y/N): ").lower() in ("y", "yes")
+
+    migrate_cache(table=table, combined=combined, selected_files=selected_files, bypassGetAll=False, overwrite=overwrite, which_direction=which_direction)
+
+
+def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_files: list = [], which_direction: int = None, bypassGetAll: bool = False, overwrite: bool = False) -> None:
+    source_files = []
+    sel_dirfil = [os.sep.join(tmpvar) for tmpvar in selected_files]
 
     # Define source and destination directories
     source_dir = ollama_ext_dir if which_direction == '1' else ollama_int_dir
@@ -277,16 +254,16 @@ def migrate_cache(table: PrettyTable|None = None, combined: list = []) -> None:
         # Normalize the file path to use consistent separators
         normalized_path = os.path.normpath(file_path)
         
-        # Extract the last two segments of the path
-        path_segments = normalized_path.split(os.sep)[-2:]
+        # Extract the last three segments of the path
+        path_segments = normalized_path.split(os.sep)[-3:]
         
         # Re-join the last two segments and check if this combination is in sel_dirfil
-        dir_file_combination = '/'.join(path_segments)
+        dir_file_combination = os.sep.join(path_segments)
         if dir_file_combination in sel_dirfil:
             source_files.append(file_path)
     
     for source_file in source_files:
-        dest_file = os.path.join(dest_dir, '/'.join(source_file.split('/models/')[1:]))
+        dest_file = os.path.join(dest_dir, os.sep.join(source_file.split('/models/')[1:]))
 
         # Ensure the destination directory exists
         os.makedirs(os.path.dirname(dest_file), exist_ok=True)
@@ -426,7 +403,7 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
     choice = choice.lower()
     if choice in ['1', 'c', 'copy']:
         print(f"{ftStr('Copy')} cache: migrate files between internal and external cache folders.")
-        migrate_cache(models_table, combined)
+        migrate_cache_user(models_table, combined)
     elif choice in ['2', 't', 'toggle']:
         print(f"{ftStr('Toggle')} Ollama Int/Ext Cache: Swtich between internal and external cache folders.")
         toggle_int_ext_cache(combined=combined, table=models_table)
