@@ -1,0 +1,7 @@
+argparse
+ollama
+pip-chill
+prettytable
+tqdm
+typing
+wget
