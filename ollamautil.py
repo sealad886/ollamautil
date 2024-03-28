@@ -1,7 +1,9 @@
-#!/user/bin/python3
-# To make this executable, update shebang to your python interpreter
-# then CHMOD +x ollamautil.py and put it in your PATH. Optionally
-# remove .py from the filename.
+#!/Users/andrew/zzCoding-play/chatparser-data/venvs/ollamautil/bin/python
+# To make this executable, update shebang to your python executable
+# (this should be your venv/bin/python file usually, not /usr/bin/python)
+# To run as a command line util, run 'CHMOD +x ollamautil.py', and then put 
+# the final executable in your PATH. Optionally remove .py from the filename.
+# command line execution: ollamautil
 # ---------------------------
 # OllamaUtil
 #
@@ -30,6 +32,7 @@
 import os
 import json
 import ast
+import argparse
 import hashlib
 from prettytable import PrettyTable
 from tqdm import tqdm as tqdm
@@ -51,6 +54,7 @@ def walk_dir(directory):
 def display_models_table(combined: List[List], table: PrettyTable|None = None):
     table = get_models_table(combined,table=table) if not table else table
     print(table)
+    print(f'\nCurrent cache set to:    \033[4m{get_curnow_cache()}\033[0m')
     return table
 
 def get_models_table(combined: List[List], table: PrettyTable|None = None):
@@ -156,15 +160,22 @@ def get_user_confirmation(prompt):
         else:
             print("Invalid response. Please answer 'yes' or 'no'.")
 
-
-def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
-    current_path = os.path.realpath("~/.ollama/models")
+def get_curnow_cache():
+    home = os.path.expanduser("~")
+    current_path = os.path.realpath(os.path.join(home, '.ollama', 'models'))
+    current_path = os.path.realpath(os.path.join(home, '.ollama', 'models'))
+    curnow = None
     if current_path == ollama_int_dir:
         curnow = "internal"
     elif current_path == ollama_ext_dir:
         curnow = "external"
     else:
         AssertionError(f"Error: somehow managed to get to {current_path}")
+    
+    return curnow
+
+def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
+    curnow = get_curnow_cache()
     
     table = display_models_table(combined=combined, table=table)
     print("Review which models are available in which cache carefully.\n\n")
@@ -353,6 +364,7 @@ def handle_corrupted_file(file_path):
 
 def remove_from_cache() -> None:
     print("Please use 'ollama rm [MODEL]' until this functionality is finished.")
+    input("Press Return/Enter to continue...")
     return 
     while True:
         int_or_ext = input("Delete files from?\n1. Internal\n2. External\n3. Both")
@@ -429,6 +441,7 @@ def main() -> None:
         process_choice(choice, combined, models_table=models_table)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser("Ollamautil", description="Command line utility to manage the Ollama cache and make it easier to maintain a larger externally cached database and move models on- and off-device. Assumes Ollama defaults on installation (namely ~/.ollama is default directory) is used.\n\nBefore using this utility, you should configure OLLAMAUTIL_INTERNAL_DIR and OLLAMAUTIL_EXTERNAL_DIR to point to the \033[1mmodels/\033[0m directory in your internal and external caches, respectively.]]")
     # define the default source directories (no training delimiter)
     # points to path of internal "modules" directory
     ollama_int_dir = os.getenv("OLLAMAUTIL_INTERNAL_DIR")
