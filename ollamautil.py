@@ -298,13 +298,15 @@ def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_
 # Assuming source_file is the path to the manifest file
 def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
     # load manifest
-    blob_hash_prefix = "sha256:"
+    blob_hash_prefix = "sha256-"
     bb_px_len = len(blob_hash_prefix)
     manifest_data = []
     try:
         with open(source_file, 'r') as f:
             rawdata = json.load(f)
-            manifest_data.append(rawdata['config']['digest'][bb_px_len:])
+            for layer in rawdata['layers']:
+                if "ollama.image" in layer['mediaType']:
+                    manifest_data.append(layer['digest'][bb_px_len:])
             manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
     except Exception as e:
         print(f"Error loading manifest: {e}")
@@ -313,7 +315,7 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
     for blob_digest in manifest_data:
         source_blob = os.path.join(source_dir, "blobs", blob_hash_prefix + blob_digest)
         dest_blob_dir = os.path.join(dest_dir, "blobs")
-        dest_blob = os.path.join(dest_blob_dir, blob_hash_prefix+ blob_digest)
+        dest_blob = os.path.join(dest_blob_dir, blob_hash_prefix + blob_digest)
 
         # Ensure the destination blob directory exists
         os.makedirs(dest_blob_dir, exist_ok=True)
@@ -328,16 +330,16 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
             print(f"Copied {source_blob} to {dest_blob}")
 
             # Validate SHA-256 hash of copied blob
-            validate_blob_sha256(dest_blob, blob_hash_prefix + blob_digest)
+            validate_blob_sha256(dest_blob, blob_hash_prefix, blob_hash_prefix + blob_digest)
 
-def validate_blob_sha256(dest_blob: str, expected_digest: str = ""):
+def validate_blob_sha256(dest_blob: str, blob_hash_prefix: str, expected_digest: str = ""):
     sha256_hash = hashlib.sha256()
     try:
         with open(dest_blob, 'rb') as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(chunk)
         actual_chksum = sha256_hash.hexdigest()
-        actual_digest = 'sha256:' + actual_chksum
+        actual_digest = blob_hash_prefix + actual_chksum
         if expected_digest == "":
             print(f"Expected checksum for {dest_blob} not given. For your information, it is: {actual_chksum}")
         if actual_digest != expected_digest:
