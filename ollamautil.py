@@ -307,6 +307,7 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
             for layer in rawdata['layers']:
                 if "ollama.image" in layer['mediaType']:
                     manifest_data.append(layer['digest'][bb_px_len:])
+            manifest_data.append(rawdata['config']['digest'][bb_px_len:])
             manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
     except Exception as e:
         print(f"Error loading manifest: {e}")
