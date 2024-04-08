@@ -1,4 +1,4 @@
-#!/Users/andrew/zzCoding-play/chatparser-data/venvs/ollamautil/bin/python
+#!/Users/andrew/venvs/ollamautil/bin/python
 # To make this executable, update shebang to your python executable
 # (this should be your venv/bin/python file usually, not /usr/bin/python)
 # To run as a command line util, run 'CHMOD +x ollamautil.py', and then put 
@@ -232,6 +232,21 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
             continue  # Prompt the user to select again if multiple selections are not allowed
         
         return selected_files
+    
+def pull_models(combined, table: PrettyTable|None = None, prompt: str|None = None, allow_multiples: bool = True):
+    if table is None: table = display_models_table(combined)    
+
+    # Call 'select_models()' function and store the result in a list of files to pull
+    sel_dirfil = select_models(table, prompt=prompt, allow_multiples=allow_multiples)
+    
+    for weight in sel_dirfil:
+        # construct the model name/path for Ollama.com specifically
+        if weight[0] is not 'library':
+            model_path = weight[0] + "/" + weight[1] + ":" + weight[2]
+        else:
+            model_path = weight[1] + ":" + weight[2]
+        print(f'Pulling {model_path} from Ollama.com...')
+        os.system(f"ollama pull {model_path}")
 
 def migrate_cache_user(table, combined):
     if combined == []:
@@ -406,10 +421,11 @@ def ftStr(word: str) -> str:
 
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
-    print(f"1. {ftStr('Copy')} Cache")
-    print(f"2. {ftStr('Toggle')} Ollama Int/Ext Cache")
+    print(f"1. {ftStr('Copy')} Ollama data files from internal or external cache")
+    print(f"2. {ftStr('Toggle')} Ollama internal/external cache")
     print(f"3. {ftStr('Remove')} from cache")
-    print(f"4. {ftStr('Quit')}")
+    print(f"4. {ftStr('Pull')} selected models from Ollama.com")
+    print(f"Q. {ftStr('Quit')}")
     choice = input("Select: ")
     return choice
 
@@ -424,7 +440,10 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
     elif choice in ['3', 'r', 'remove']:
         print(f"{ftStr('Remove')} from cache: remove one or more model/tag from internal or external cache.")
         remove_from_cache()
-    elif choice in ['4', 'q', 'quit']:
+    elif choice in ['4', 'p', 'pull']:
+        print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist. Useful to repair cache that has missing files.")
+        pull_models(combined, models_table)
+    elif choice in ['Q', 'q', 'quit']:
         print(f"{ftStr('Quit')} utility, exiting...")
         exit()
     else:
