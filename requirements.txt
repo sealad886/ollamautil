@@ -1,7 +1,5 @@
-argparse
-ollama
-pip-chill
-prettytable
-tqdm
-typing
-wget
+argparse==1.4.0
+ollama==0.1.8
+prettytable==3.10.0
+tqdm==4.66.2
+typing==3.7.4.3
