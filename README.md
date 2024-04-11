@@ -38,25 +38,21 @@ ln -s -F $HOME/ollama_internal/models $HOME/.ollama/
 
 ### Installing
 
-In your base environment, or in the environment of your choosing, install a couple of basic reqs:
-```bash
-pip install -U tqdm prettytable typing git
+### Getting started
+It is recommended that you create a virtual environment solely for this utility to use. First, create this environment and activate it. Then:
+```python
+cd /path/to/download
+pip install -r requirements.txt
 ```
 
-Decide where you'll download this script. It should be a unique folder for this repo. 
-```bash
-mkdir -p path/to/parent/repo/
-cd path/to/parent/repo
-git clone https://github.com/sealad886/ollama_util.git .
-```
+### A real CLI utility
+If you plan to do what I did and make this executable:
+1. Update the shebang in the first line of ollamautil.py to point to your virtual environment's Python executable. 
+2. Rename the file: `mv ollamautil.py ollamautil`
+3. Make the file executable: `chmod +x ollamautil`
+4. Optional: move this into your PATH so you don't have to remember where it is: `mv ollamautil /usr/local/bin/ollamautil`
 
-To be able to run this at the command line like any other utility, create an alias. Note that I am using
-`python3` as my invoking command, but yours might allow `python` or some other variation.
-```
-alias ollamautil="python3 /path/to/repo/ollamautil.py"
-```
-HINT: add this to your BASH, zsh, or other shell startup files so this happens automagically.
-On MacOS Catalina and later, zsh is the default. [more info](https://wiki.archlinux.org/title/zsh#)
+That last part assumes that that directory is in your PATH. Anywhere in your PATH is fine, you can even add to your PATH. Which is a separate discussion. 
 
 ### Executing program
 
