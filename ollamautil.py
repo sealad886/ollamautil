@@ -36,6 +36,7 @@ import hashlib
 from prettytable import PrettyTable
 from tqdm import tqdm as tqdm
 from typing import List, Dict, Tuple
+import shutil
 
 def walk_dir(directory):
     files = []
@@ -300,6 +301,7 @@ def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_
                     for chunk in iter(lambda: src.read(4096), b""):
                         dst.write(chunk)
                         pbar.update(len(chunk))
+                copy_metadata(source_file, dest_file)
             print(f"Copied {source_file} to {dest_file}")
         else:
             None
@@ -319,14 +321,15 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
     try:
         with open(source_file, 'r') as f:
             rawdata = json.load(f)
-            for layer in rawdata['layers']:
-                if "ollama.image" in layer['mediaType']:
-                    manifest_data.append(layer['digest'][bb_px_len:])
-            manifest_data.append(rawdata['config']['digest'][bb_px_len:])
-            manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
     except Exception as e:
         print(f"Error loading manifest: {e}")
-        return
+        assert rawdata is not None
+    else:
+        for layer in rawdata['layers']:
+            if "ollama.image" in layer['mediaType']:
+                manifest_data.append(layer['digest'][bb_px_len:])
+        manifest_data.append(rawdata['config']['digest'][bb_px_len:])
+        manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
     
     for blob_digest in manifest_data:
         source_blob = os.path.join(source_dir, "blobs", blob_hash_prefix + blob_digest)
@@ -343,6 +346,7 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
                     for chunk in iter(lambda: src.read(4096), b""):
                         dst.write(chunk)
                         pbar.update(len(chunk))
+                copy_metadata(source_blob, dest_blob)
             print(f"Copied {source_blob} to {dest_blob}")
 
             # Validate SHA-256 hash of copied blob
@@ -365,6 +369,15 @@ def validate_blob_sha256(dest_blob: str, blob_hash_prefix: str, expected_digest:
         print(f"Error validating blob: {e}")
     
     print(f"Checksum verified: {dest_blob}")
+
+def copy_metadata(src, dst) -> None:
+    try:
+        #shutil.copymode(src, dst)
+        shutil.copystat(src, dst)
+        # TODO: decide if updating the parent directory information is the right thing to do. Probably yes, but make the deicion later.
+        shutil.copystat(os.path.dirname(src), os.path.dirname(dst))
+    except Exception as e:
+        print(f'Unable to copy metadata and other attributes for {os.path.basename(dst)}. Continuing with copy.')
 
 def handle_corrupted_file(file_path):
     response = input("Keep corrupted file on target disk? (y/N): ").lower()
