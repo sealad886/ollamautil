@@ -242,7 +242,7 @@ def pull_models(combined, table: PrettyTable|None = None, prompt: str|None = Non
     
     for weight in sel_dirfil:
         # construct the model name/path for Ollama.com specifically
-        if weight[0] is not 'library':
+        if weight[0] != 'library':
             model_path = weight[0] + "/" + weight[1] + ":" + weight[2]
         else:
             model_path = weight[1] + ":" + weight[2]
