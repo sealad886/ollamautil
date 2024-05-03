@@ -5,61 +5,98 @@ cache when on-device storage is at a premium.
 
 ## Description
 
-OllamaUtil adds some cool functionlaity that adds the ability to migrate your cache off of your 
-main storage disk, while still easily syncing models between internal and external storage
-without having to download them again from the repo.
+The Ollama Utility is a command-line tool designed to manage the Ollama cache and facilitate the maintenance of a larger externally cached database. It provides features to copy files between internal and external caches, toggle between internal and external caches, remove models from the cache, and pull selected models from Ollama.com.
 
-Whenever the cache or a part of it is migrated, the sha256 checksum is calculated on the target data
-(i.e. after copy) and the utility will not continue until the user decides to keep or 
-delete the corrupted data. 
+## Disclaimer
+
+I do not claim to be employed by, associated with, or otherwise endorsed by Ollama, Inc. or any of its affiliates. I am an independent developer who has created this tool as a convenience for my own use.
 
 ## Before you start
 
-This technique relies on creating a symlink at `$HOME/.ollama/models` that can toggle between
+The utility relies on creating a symlink at `$HOME/.ollama/models` that will then toggle between
 your internal and external caches. Make sure you're okay with that.
 
-## Getting Started
-
-A note that this is all very much so under development. Furhter instructions for how to 
-install and configure environments and what to install will be forthcoming in future versions. 
-
-### Dependencies
-
-Describe any prerequisites, libraries, OS version, etc., needed before installing program.
-* Install Ollama [Ollama.com](https://ollama.com/download) or on [GitHub](https://github.com/ollama/ollama)
-
-Stop any active Ollama processes currently running. 
-
-To start, move your current cache to a new directory, then symlink to the new location, as in this example:
-```bash
-mv $HOME/.ollama/models $HOME/ollama_internal/models/
-ln -s -F $HOME/ollama_internal/models $HOME/.ollama/
+Move/copy your entire cache to another directory:
 ```
+mkdir -p ${HOME}/ollama_internal/models
+cp -r ${HOME}/.ollama/models/ ${HOME}/ollama_internal/models/
+# run the below command to then remove the previous Ollama cache directory:
+# rm -rf ${HOME}/.ollama/models
+```
+
+Create a symlink to your external cache:
+```
+ln -s ${HOME}/ollama_internal/models ${HOME}/.ollama/models
+```
+
+### Mac vs Windows vs Linux
+
+I have only tested this on MacOS Sonoma 14.4+. It should reasonably work on any POSIX system. 
+
+Symlinks are not available on Windows, so the utility is not recommedned on Windows.
 
 ### Installing
 
-### Getting started
-It is recommended that you create a virtual environment solely for this utility to use. First, create this environment and activate it. Then:
-```python
-cd /path/to/download
-pip install -r requirements.txt
+Clone this repository:
+```
+git clone https://github.com/sealad886/ollama-util.git
+cd /path/to/ollama-util
+pip install -U -r requirements.txt
+```
+Note: it is highly recommended that you create a virtual environment that is stable for this utility. For example:
+```
+python -m venv ollama-util
+source ollama-util/bin/activate
+pip install -U -r requirements.txt
 ```
 
-### A real CLI utility
-If you plan to do what I did and make this executable:
-1. Update the shebang in the first line of ollamautil.py to point to your virtual environment's Python executable. 
-2. Rename the file: `mv ollamautil.py ollamautil`
+### Required Configuration
+Before using this utility, you need to configure the following environment variables:
+
+* `OLLAMAUTIL_INTERNAL_DIR`: points to the path of the internal "models" directory
+* `OLLAMAUTIL_EXTERNAL_DIR`: points to the path of the external "models" directory
+* `OLLAMAUTIL_FILE_IGNORE`: (optional) a list of file patterns to ignore (e.g., [".DS_Store"])
+
+For MacOS, the recommendation is to set `OLLAMAUTIL_FILE_IGNORE` as follows:
+```bash
+export OLLAMAUTIL_FILE_IGNORE='[".DS_Store"]'
+```
+Pay close attention to the single- and double-quotes when configuring this or it will break. 
+This is defaulted in code, but it is not recommended that you rely on this default.
+
+* For `zsh`, add these to your `.zshenv` file. 
+* For `bash`, add these to your `.bashrc` file. (I think)
+* For `fish`, add these to your `.config/fish/config.fish` file. (I think)
+
+## Features
+1. **Copy**: Migrate files between internal and external cache folders.
+2. **Toggle**: Switch between internal and external cache folders.
+3. **Remove**: Remove one or more models from the internal or external cache.
+4. **Pull**: Pull selected models from Ollama.com (in some cases, can help to repair damaged cache).
+
+## Usage
+Run the utility by executing `python ollamautil.py` in your terminal/command prompt.
+Select a feature from the main menu:
+```
+1: Copy cache
+2: Toggle internal/external cache
+3: Remove from cache
+4: Pull selected models
+5: Push selected models
+Q: Quit
+```
+
+### Optional steps to make execution easier
+If you would prefer to run `ollamautil` from anywhere, I recommend:
+1. Update the shebang in the first line of `ollamautil.py` to point to your virtual environment's Python executable. 
+2. Rename the file: `cp ollamautil.py ollamautil`
 3. Make the file executable: `chmod +x ollamautil`
 4. Optional: move this into your PATH so you don't have to remember where it is: `mv ollamautil /usr/local/bin/ollamautil`
+This 4th step is the gamechanger in terms of ease-of-use. It makes this utility available from any directory.
 
-That last part assumes that that directory is in your PATH. Anywhere in your PATH is fine, you can even add to your PATH. Which is a separate discussion. 
+## Background on Ollama cache system
 
-### Executing program
-
-BEFORE running this utility, ensure that you're ready to start messing around with your cache. It is not for the 
-faint of heart, and it may lead to file instability, unexpected behaviors, file corruption, etc. 
-
-I will re-iterate: this utility is released as-is, and I do not work for or develop for Ollama. 
+Note: I remind people that I am not affiliate with Ollama in any way. What I state here is my own understanding learned from using and manipulating the cache.
 
 The Ollama cache, briefly, looks like this if you use the defaults during setup:
 in the home directory:
@@ -79,17 +116,7 @@ in the home directory:
                 |--modelB
                     --latest
 ```
-Add the following to your shell startup scripts, and point them to the "models" directory:
-```bash
-export OLLAMAUTIL_INTERNAL_DIR="<path to internal (on-disk) cache>"
-export OLLAMAUTIL_EXTERNAL_DIR="<path to external (removable drive) cache>"
-export OLLAMAUTIL_FILE_IGNORE='["complete file name" "complete file name" "complete file name"]' 
-```
-For MacOS, the recommendation is to set `OLLAMAUTIL_FILE_IGNORE` as follows:
-```bash
-export OLLAMAUTIL_FILE_IGNORE='[".DS_Store"]'
-```
-Pay close attention to the single- and double-quotes when configuring this or it will break. 
+The `blobs` directory contains all of the model files, organized by model name and variant. The `manifests` directory contains a registry file for each Ollama registry. In this case, there is only one: `registry.ollama.ai`. This file lists all of the models in that registry, along with their variants. The `latest` file in each model directory is a symlink to the latest variant of that model, and running the latest model is the default (i.e. `ollama run codellama` is equivalent to `ollama run codellama:latest`).
 
 ## Help
 
@@ -98,9 +125,7 @@ Pay close attention to the single- and double-quotes when configuring this or it
 ## TODO
 
 1. Check if Ollama models are running / active before allowing any part of the utility to run.
-1. Finish the remove_from_cache() method.
-    1. This is different from the `ollama rm` tool because it will enable you to remove from either the internal or external cache without having to switch over. 
-1. Develop wrapper function for other commands in `ollama` CLI (e.g. enable `ollama pull` to store to either cache)
+1. Develop wrapper function for other commands in `ollama` API (via `ollama-python`)
 1. Eventually, maybe even have so much wrapper around this that ollama wouldn't know which cache you used for which models. The user could be presented with all models in the internal/external cache, and then the invoking method could figure out how to handle the symlinks. 
     1. Only potential issue here would be that you could only have one model running at any given time. 
 1. Tab-completion in zsh.
@@ -136,7 +161,6 @@ Contributors names and contact info
 
 ## Acknowledgments
 
-I will note that portions of this code were analyzed and edits suggested by various LLMs, including:
-* OpenAI ChatGPT-4
-* wizardcoder (7B and 34B-Python models)
-* Mystral 
+* Thanks to Ollama for creating a great tool for running LLMs.
+* Thanks to the `llama.cpp` project for enabling conversion and quantization of models.
+* Thanks to my previous CS professors--apparently I still know a thing or two, or at least pretend to!
