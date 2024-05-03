@@ -5,7 +5,7 @@ cache when on-device storage is at a premium.
 
 ## Description
 
-The Ollama Utility is a command-line tool designed to manage the Ollama cache and facilitate the maintenance of a larger externally cached database. It provides features to copy files between internal and external caches, toggle between internal and external caches, remove models from the cache, and pull selected models from Ollama.com.
+The `ollamautil` utility is a command-line tool designed to manage the Ollama cache and facilitate the maintenance of a larger externally cached database. It provides features to copy files between internal and external caches, toggle between internal and external caches, remove models from the cache, and pull selected models from Ollama.com.
 
 ## Disclaimer
 
