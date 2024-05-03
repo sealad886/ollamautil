@@ -37,6 +37,8 @@ from prettytable import PrettyTable
 from tqdm import tqdm as tqdm
 from typing import List, Dict, Tuple
 import shutil
+import ollama
+import re
 
 def walk_dir(directory):
     files = []
@@ -176,6 +178,10 @@ def get_curnow_cache():
 
 def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
     curnow = get_curnow_cache()
+    toggle_to = {
+        'internal': "external",
+        'external': "internal"
+    }
     
     table = display_models_table(combined=combined, table=table)
     print("Review which models are available in which cache carefully.\n\n")
@@ -185,52 +191,81 @@ def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
 
     print(f"Current Ollama cache set to: {curnow.upper()}.")
     user_conf = get_user_confirmation("Would you like to swap symlink the other source? (yN): ")
-    if user_conf:
-        if curnow == "internal":
-            os.system(f"ln -s -F {ollama_ext_dir} ${{HOME}}/.ollama/")
-            print(f"Changed .ollama symlink to look to EXTERNAL drive.")
-            return "external"
-        else:
-            os.system(f"ln -s -F {ollama_int_dir} ${{HOME}}/.ollama/")
-            print(f"Changed .ollama symlink to look to INTERNAL drive.")
-            return "internal"
+    if user_conf: _toggle_cache(toggle_to[curnow])
+    else: print(f"No changes to Ollama cache pointer made. Still using \033[1;4m{curnow.upper()}\033[0m.")
+
+def _toggle_cache(toggle_target: str):
+    if toggle_target == "internal":
+        os.system(f"ln -s -F {ollama_int_dir} ${{HOME}}/.ollama/")
+        print(f"Changed .ollama symlink to look to INTERNAL drive.")
+        return "external"
+    elif toggle_target == "external":
+        os.system(f"ln -s -F {ollama_ext_dir} ${{HOME}}/.ollama/")
+        print(f"Changed .ollama symlink to look to EXTERNAL drive.")
+        return "internal"
     else:
-        print(f"No changes to .ollama cache made. Still looking to {curnow.upper()}.")
-    
-        
+        print(f'Cache target not toggled. Requested target \'{toggle_target}\' not defined.')
+
 def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: bool = True, bypassGetAll: bool = False) -> List[List[str]]:
+    def is_valid_input(user_input) -> bool:
+        pattern = r"^[\d,0-9\s\-]+$"
+        if re.match(pattern, user_input):
+            return True
+        else:
+            return False
+        
     selected_files = []
     print(table)
+
     if prompt is None:
-        base_prompt = "Enter the number of the model/tag to act on (e.g. 1, 3, 5) or all"
+        base_prompt = "Select model/tag items to act on using numbers (e.g. 1, 3, 12-15) or all"
     else:
         base_prompt = prompt
 
     while True:  # Loop until valid input is received
         user_input = "ALL" if bypassGetAll else input(f"{base_prompt}: ").strip()
+        if not is_valid_input(user_input):
+            print(f"Invalid input, contains unpermitted characters: \'{user_input}\'. Please enter a valid selection.")
+            continue
         
-        if user_input.upper() == "ALL":
-            user_input = list(range(1, len(table._rows) + 1))
-
         if user_input == "":
             print("No model/tag option selected. Quitting...")
             return []
-        if type(user_input) != list:
-            user_input = user_input.split(",")
-        try:
-            if not (type(user_input[0] is int)):
-                ints = [int(x.strip()) for x in user_input if x.strip().isdigit()]
-            else:
-                ints = user_input
-            for i in ints:
-                selected_files.append(table._rows[int(i)-1][1:-2])
-        except ValueError:
-            print("Invalid input. Please enter numbers separated by commas.")
-            continue
+        
+        # handle special case of "all" option (i.e. all models)
+        if user_input.upper() == "ALL":
+            user_input = [int(num) for num in range(1, len(table._rows) + 1)]
+        
+        # Remove leading/trailing whitespaces and split by comma
+        # input() return type is 'str'`
+        if type(user_input) == str:
+            user_input = [num.strip() for num in user_input.split(",")]
 
+        try:
+            ranges = []
+            for item in user_input:
+                if '-' in item:  
+                    parts = item.split('-')
+                    if len(parts) != 2:
+                        print(f"Invalid range: \'{item}\'. Please enter a valid range. Original input:\n    '{user_input}'")
+                        continue
+                    start, end = map(lambda x: int(x.strip()), parts)
+                    ranges.extend(range(start, end + 1))
+                else:  
+                    ranges.append(int(item))
+            
+            # Remove duplicates and sort the list
+            ranges = sorted(set(ranges))
+            
+            for i in ranges:
+                selected_files.append(table._rows[i - 1][1:-2])
+        except ValueError:
+            print(f"Invalid input '{user_input}'. Please enter numbers separated by commas.")
+            continue
+        
         if not allow_multiples and len(selected_files) > 1:
             print("Multiple selections are not allowed. Please select only one model.")
-            continue  # Prompt the user to select again if multiple selections are not allowed
+            continue  
         
         return selected_files
     
@@ -392,26 +427,63 @@ def handle_corrupted_file(file_path):
         os.rename(file_path, corrupted_path)
         print(f"Renamed corrupted file to: {corrupted_path}")
 
-def remove_from_cache() -> None:
-    print("Please use 'ollama rm [MODEL]' until this functionality is finished.")
-    input("Press Return/Enter to continue...")
-    return 
+def remove_from_cache(combined, table) -> None:
+    '''Use the ollama Python library to remove models from the Ollama cache.
+    User is first prompted to remove models from internal, external, or both caches, and the
+    the displayed table contains only those models that exist in the selected cache(s).
+    args: 
+        combined  (list): list of tuples containing model names and their corresponding file paths. 
+        table  (PrettyTable): PrettyTable object cached in memory containing the table to display
+    output: None
+    '''
+    external_dict, internal_dict, _ = build_ext_int_comb_filelist()
+
+    # Prompt user to select cache(s) to remove from
+    caches = []        # options are: ['internal', 'external', 'both']
     while True:
-        int_or_ext = input("Delete files from?\n1. Internal\n2. External\n3. Both")
-        if int_or_ext not in ['1', '2', '3']:
-            print(f"{int_or_ext} is not a valid selection.\n")
-            continue
-        break
-    curcache = os.getenv("OLLAMA_MODELS")
-    if int_or_ext == '1':
-        # Internal selected
-        os.environ["OLLAMA_MODELS"] = ollama_int_dir
-        os.system("ollama ")
-    elif int_or_ext == '2':
-        # External selected
-        None
-    elif int_or_ext == '3':
-        print(f'Option not yet implemented. Please remove files from internal and external caches separately.')
+        cache_choice = input("Note that \033[1;4mall Tags\033[0m are shown in both caches if you select only one. \
+                             \nRemove models from which cache? (q) exit to menu, (1) internal, (2) external, (3) both? ")
+        if cache_choice in ('q', 'Q'): return
+        elif cache_choice in ('1', '2', '3'):
+            if cache_choice ==1: caches = ['internal']
+            elif cache_choice ==2: caches = ['external']
+            elif cache_choice ==3: caches = ['internal', 'external']
+            break
+        else:
+            print("Invalid choice. Please try again.")
+    
+    # Filter combined list based on user's cache selection
+    if cache_choice == '1':
+        edit_combined = [(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in internal_dict]
+    elif cache_choice == '2':
+        edit_combined = [(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in external_dict]
+    else:
+        edit_combined = combined
+
+    # Display table with filtered models
+    table = display_models_table(edit_combined)
+
+    # Prompt user to select models to remove
+    selected_files = select_models(table, None, True, bypassGetAll=False)
+    if selected_files == []:
+        print("No models selected. Quitting...")
+        return
+
+    # Remove selected models from cache using Ollama Python API
+    curnow = get_curnow_cache()
+    for cache in caches:
+        _toggle_cache(cache)
+        print(f"Removing models from \033[48;5;19m{cache}\033[48;5;0m cache...")
+        for model in selected_files:
+            model_parsed = os.sep.join([piece for piece in model[:-1] if piece not in ["library", "latest"]])
+            if model[-1] == 'latest': model_parsed = model_parsed + ":latest"
+            print(f"Removing {model_parsed} from cache...", end='')
+            status = ollama.delete(model_parsed)
+            if status == 'success': print(f"Removing {model_parsed} from cache...Done!", end='\n', flush=True)
+            elif status == 'error': print(f"Removing {model_parsed} from cache...Error!", end='\n', flush=True)
+    _toggle_cache(curnow)   # important to return cache target back to prior state
+
+    print(f"{len(selected_files)} models removed successfully from cache(s): \033[1;4m{','.join(caches)})\033[0m")
 
 def ftStr(word: str) -> str:
     '''
@@ -452,7 +524,7 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
         toggle_int_ext_cache(combined=combined, table=models_table)
     elif choice in ['3', 'r', 'remove']:
         print(f"{ftStr('Remove')} from cache: remove one or more model/tag from internal or external cache.")
-        remove_from_cache()
+        remove_from_cache(combined, models_table)
     elif choice in ['4', 'p', 'pull']:
         print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist. Useful to repair cache that has missing files.")
         pull_models(combined, models_table)
