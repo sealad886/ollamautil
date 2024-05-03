@@ -282,7 +282,25 @@ def pull_models(combined, table: PrettyTable|None = None, prompt: str|None = Non
         else:
             model_path = weight[1] + ":" + weight[2]
         print(f'Pulling {model_path} from Ollama.com...')
-        os.system(f"ollama pull {model_path}")
+        ollama.pull(model_path)
+
+def push_models(combined, table: PrettyTable|None = None):
+    if table is None: table = display_models_table(combined)
+
+    sel_dirfil = select_models(table)
+
+    for weight in sel_dirfil:
+        # construct the model name/path for Ollama.com specifically
+        if weight[0] != 'library':
+            model_path = weight[0] + "/" + weight[1] + ":" + weight[2]
+        else:
+            print(f"Only personal repos are supported at this time. To upload to your personal repository, models must be saved as: \
+                  \n      <username>/<model>\
+                  \n  eg. sealad886/llama3:my_customization\
+                  \n  eg. <username>/{':'.join(weight[1:2])}")
+            continue
+        print(f'Pushing {model_path} to Ollama.com...')
+        ollama.push(model_path)
 
 def migrate_cache_user(table, combined):
     if combined == []:
@@ -485,24 +503,28 @@ def remove_from_cache(combined, table) -> None:
 
     print(f"{len(selected_files)} models removed successfully from cache(s): \033[1;4m{','.join(caches)})\033[0m")
 
-def ftStr(word: str) -> str:
+def ftStr(word: str, emphasis_index: int = 0) -> str:
     '''
     Helper function to format a string as such:
-        first letter: bold and underlined
+        selected letter: bold and underlined
         rest of string: bold only
     In this use case, to be used to indicate to shell user which additional
     text inputs are valid options in a menu selection.
 
     Input:
-        word: (Required) str - a string of 
+        word:  (Required) str  - a string of 
+        emphasis_index: (Optional) int  - index of the letter to emphasize (default=0)
     '''
     word = word.strip()
     if word == "":
         return ""
-    opt = "\033[1;4m" + word[0] + "\033[0m"
-    if len(word) > 1:
-        opt += "\033[1m" + word[1:] + "\033[0m"
+    opt = "\033[1m" + word[:emphasis_index] + "\033[0m"
+    if emphasis_index < len(word):
+        opt += "\033[1;4m" + word[emphasis_index] + "\033[0m"
+    if emphasis_index + 1 < len(word):
+        opt += "\033[1m" + word[emphasis_index + 1:] + "\033[0m"
     return opt
+
 
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
@@ -528,6 +550,9 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
     elif choice in ['4', 'p', 'pull']:
         print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist. Useful to repair cache that has missing files.")
         pull_models(combined, models_table)
+    elif choice in [5, 'u', 'push']:
+        print(f"ftStr('Push',1) selected models to Ollama.com.")
+        push_models(combined, models_table)
     elif choice in ['Q', 'q', 'quit']:
         print(f"{ftStr('Quit')} utility, exiting...")
         exit()
@@ -563,9 +588,9 @@ if __name__ == "__main__":
         print(("Warning: environment variables not configured correctly",
             f"OLLAMAUTIL_INTERNAL_DIR: {ollama_int_dir}",
             f"OLLAMAUTIL_EXTERNAL_DIR: {ollama_ext_dir}",
-            f"OLLAMAUTIL_FILE_IGNORE: {ollama_file_ignore}"
-            "These are required to be configured before invoking this utility."))
-        AssertionError("Environment variables not configured correctly. Unable to run utility.")
+            f"OLLAMAUTIL_FILE_IGNORE: {ollama_file_ignore} (optional)"
+            "Please configure these before using this utility."))
+        raise AssertionError, "Environment variables not configured correctly. Unable to run utility."
     FILE_LIST_IGNORE = ollama_file_ignore
 
     main()
