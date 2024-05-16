@@ -190,17 +190,17 @@ def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
         migrate_cache(table=table, combined=combined, bypassGetAll=True, which_direction=direction, overwrite=False)
 
     print(f"Current Ollama cache set to: {curnow.upper()}.")
-    user_conf = get_user_confirmation("Would you like to swap symlink the other source? (yN): ")
+    user_conf = get_user_confirmation(f"Would you like to swap symlink to \033[1m{toggle_to[curnow].upper()}\033[0m source? (yN): ")
     if user_conf: _toggle_cache(toggle_to[curnow])
     else: print(f"No changes to Ollama cache pointer made. Still using \033[1;4m{curnow.upper()}\033[0m.")
 
 def _toggle_cache(toggle_target: str):
     if toggle_target == "internal":
-        os.system(f"ln -s -F {ollama_int_dir} ${{HOME}}/.ollama/")
+        os.system(f"ln -s -F -f -h {ollama_int_dir} ${{HOME}}/.ollama/models")
         print(f"Changed .ollama symlink to look to INTERNAL drive.")
         return "external"
     elif toggle_target == "external":
-        os.system(f"ln -s -F {ollama_ext_dir} ${{HOME}}/.ollama/")
+        os.system(f"ln -s -F -f -h {ollama_ext_dir} ${{HOME}}/.ollama/models")
         print(f"Changed .ollama symlink to look to EXTERNAL drive.")
         return "internal"
     else:
@@ -456,6 +456,11 @@ def remove_from_cache(combined, table) -> None:
     '''
     external_dict, internal_dict, _ = build_ext_int_comb_filelist()
 
+    # def make_list(intextdict) -> list:
+    #     retlist = []
+    #     for model in intextdict:
+    #         if model[0] == 'library'
+
     # Prompt user to select cache(s) to remove from
     caches = []        # options are: ['internal', 'external', 'both']
     while True:
@@ -463,9 +468,9 @@ def remove_from_cache(combined, table) -> None:
                              \nRemove models from which cache? (q) exit to menu, (1) internal, (2) external, (3) both? ")
         if cache_choice in ('q', 'Q'): return
         elif cache_choice in ('1', '2', '3'):
-            if cache_choice ==1: caches = ['internal']
-            elif cache_choice ==2: caches = ['external']
-            elif cache_choice ==3: caches = ['internal', 'external']
+            if cache_choice == '1': caches = ['internal']
+            elif cache_choice == '2': caches = ['external']
+            elif cache_choice == '3': caches = ['internal', 'external']
             break
         else:
             print("Invalid choice. Please try again.")
@@ -495,10 +500,10 @@ def remove_from_cache(combined, table) -> None:
         for model in selected_files:
             model_parsed = os.sep.join([piece for piece in model[:-1] if piece not in ["library", "latest"]])
             if model[-1] == 'latest': model_parsed = model_parsed + ":latest"
-            print(f"Removing {model_parsed} from cache...", end='')
+            print(f"Removing {model_parsed} from cache...", end='', flush=True)
             status = ollama.delete(model_parsed)
-            if status == 'success': print(f"Removing {model_parsed} from cache...Done!", end='\n', flush=True)
-            elif status == 'error': print(f"Removing {model_parsed} from cache...Error!", end='\n', flush=True)
+            if status == 'success': print(f"Removing {model_parsed} from cache...Done!", end='\n', flush=False)
+            elif status == 'error': print(f"Removing {model_parsed} from cache...Error!", end='\n', flush=False)
     _toggle_cache(curnow)   # important to return cache target back to prior state
 
     print(f"{len(selected_files)} models removed successfully from cache(s): \033[1;4m{','.join(caches)})\033[0m")
@@ -590,7 +595,7 @@ if __name__ == "__main__":
             f"OLLAMAUTIL_EXTERNAL_DIR: {ollama_ext_dir}",
             f"OLLAMAUTIL_FILE_IGNORE: {ollama_file_ignore} (optional)"
             "Please configure these before using this utility."))
-        raise AssertionError, "Environment variables not configured correctly. Unable to run utility."
+        raise RuntimeError.add_note(note="Environment variables not configured correctly. Unable to run utility.")
     FILE_LIST_IGNORE = ollama_file_ignore
 
     main()
