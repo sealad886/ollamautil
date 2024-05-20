@@ -40,6 +40,18 @@ import shutil
 import ollama
 import re
 
+VERSION = "1.1.1"
+GITPAGE = "https://github.com/sealad886/ollama_util"
+
+def display_welcome() -> None:
+    '''
+    Print a welcome message and version number to stdout.
+    Input: None
+    Output: None
+    '''
+    welcome_message = f"\033[1;4mOllamaUtil\033[0m (c) 2024\nVersion {VERSION}\nMore info at: {GITPAGE}"
+    print(welcome_message)
+
 def walk_dir(directory):
     files = []
     for root, dirs, file_list in os.walk(directory):
@@ -59,6 +71,7 @@ def display_models_table(combined: List[List], table: PrettyTable|None = None):
     print(f'\nCurrent cache set to:    \033[4m{get_curnow_cache()}\033[0m')
     return table
 
+#TODO: #1 Add a column for disk size of model blob files
 def get_models_table(combined: List[List], table: PrettyTable|None = None):
     if not table:
         table = PrettyTable(['Lib', 'Model', 'Tag', 'External', 'Internal'],
@@ -285,6 +298,16 @@ def pull_models(combined, table: PrettyTable|None = None, prompt: str|None = Non
         ollama.pull(model_path)
 
 def push_models(combined, table: PrettyTable|None = None):
+    '''
+    Push models from a table to Ollama.com.
+
+    Parameters:
+        combined (list): A list of lists containing model information.
+        table (PrettyTable|None): Optional; a PrettyTable object for displaying models. If None, a new table will be created.
+
+    Returns:
+        None
+    '''
     if table is None: table = display_models_table(combined)
 
     sel_dirfil = select_models(table)
@@ -423,16 +446,34 @@ def validate_blob_sha256(dest_blob: str, blob_hash_prefix: str, expected_digest:
     
     print(f"Checksum verified: {dest_blob}")
 
-def copy_metadata(src, dst) -> None:
+def copy_metadata(src: str, dst: str) -> None:
+    """
+    Copies metadata and other attributes from the source file to the destination file.
+
+    Args:
+        src (str): The path to the source file.
+        dst (str): The path to the destination file.
+
+    Returns:
+        None
+    """
     try:
-        #shutil.copymode(src, dst)
         shutil.copystat(src, dst)
         # TODO: decide if updating the parent directory information is the right thing to do. Probably yes, but make the deicion later.
         shutil.copystat(os.path.dirname(src), os.path.dirname(dst))
     except Exception as e:
         print(f'Unable to copy metadata and other attributes for {os.path.basename(dst)}. Continuing with copy.')
 
-def handle_corrupted_file(file_path):
+def handle_corrupted_file(file_path: str) -> None:
+    """
+    Handles a corrupted file by asking the user if they want to keep it.
+
+    Args:
+        file_path (str): The path to the corrupted file.
+
+    Returns:
+        None
+    """
     response = input("Keep corrupted file on target disk? (y/N): ").lower()
     if response not in ('y', 'yes'):
         try:
@@ -445,6 +486,7 @@ def handle_corrupted_file(file_path):
         os.rename(file_path, corrupted_path)
         print(f"Renamed corrupted file to: {corrupted_path}")
 
+
 def remove_from_cache(combined, table) -> None:
     '''Use the ollama Python library to remove models from the Ollama cache.
     User is first prompted to remove models from internal, external, or both caches, and the
@@ -455,11 +497,6 @@ def remove_from_cache(combined, table) -> None:
     output: None
     '''
     external_dict, internal_dict, _ = build_ext_int_comb_filelist()
-
-    # def make_list(intextdict) -> list:
-    #     retlist = []
-    #     for model in intextdict:
-    #         if model[0] == 'library'
 
     # Prompt user to select cache(s) to remove from
     caches = []        # options are: ['internal', 'external', 'both']
@@ -533,6 +570,7 @@ def ftStr(word: str, emphasis_index: int = 0) -> str:
 
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
+    print(f"0. {ftStr('Display')} cache contents")
     print(f"1. {ftStr('Copy')} Ollama data files from internal or external cache")
     print(f"2. {ftStr('Toggle')} Ollama internal/external cache")
     print(f"3. {ftStr('Remove')} from cache")
@@ -543,7 +581,10 @@ def main_menu():
 
 def process_choice(choice: str, combined, models_table: PrettyTable|None = None):
     choice = choice.lower()
-    if choice in ['1', 'c', 'copy']:
+    if choice in ['0', 'd', 'display']:
+        print(f"{ftStr('Display')} contents of internal and external cache directories in a table.")
+        display_models_table(combined, models_table)
+    elif choice in ['1', 'c', 'copy']:
         print(f"{ftStr('Copy')} cache: migrate files between internal and external cache folders.")
         migrate_cache_user(models_table, combined)
     elif choice in ['2', 't', 'toggle']:
@@ -563,16 +604,22 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
         exit()
     else:
         print("Invalid choice, please try again.")
+        return
+    
+    input("Press Enter/Return to continue...")
 
 def main() -> None:
     '''
     Display main menu and basic high-level handling.
     '''
     # Assuming 'combined' is your list of models and weights
+    choice = None
     while True:
+
         # re-build the table every time you return to the main menu
         _, _, combined = build_ext_int_comb_filelist()
-        models_table = display_models_table(combined)
+        models_table = get_models_table(combined)
+        if choice is None: display_welcome()
         choice = main_menu()
         process_choice(choice, combined, models_table=models_table)
 
