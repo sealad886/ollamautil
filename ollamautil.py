@@ -606,7 +606,7 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
         print("Invalid choice, please try again.")
         return
     
-    input("Press Enter/Return to continue...")
+    input("Press return to continue...")
 
 def main() -> None:
     '''
