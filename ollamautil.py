@@ -371,7 +371,7 @@ def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_
         # Ensure the destination directory exists
         os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
-        # Copy the file if overwrite is True or if the file does not exist in the destination
+        # Copy the manifest file if overwrite is True or if the file does not exist in the destination
         if overwrite or not os.path.exists(dest_file):
             with tqdm(total=os.stat(source_file).st_size, unit='B', unit_scale=True, desc=f"Copying {os.path.basename(dest_file)}") as pbar:
                 with open(source_file, 'rb') as src, open(dest_file, 'wb') as dst:
@@ -402,9 +402,6 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
         print(f"Error loading manifest: {e}")
         assert rawdata is not None
     else:
-        for layer in rawdata['layers']:
-            if "ollama.image" in layer['mediaType']:
-                manifest_data.append(layer['digest'][bb_px_len:])
         manifest_data.append(rawdata['config']['digest'][bb_px_len:])
         manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
     
@@ -489,7 +486,7 @@ def handle_corrupted_file(file_path: str) -> None:
 
 # TODO: add something that confirms the user selections and displays the model names to users prior to deletion.
 def remove_from_cache(combined, table) -> None:
-    '''Use the ollama Python library to remove models from the Ollama cache.
+    '''Use the Ollama Python library to remove models from the Ollama cache.
     User is first prompted to remove models from internal, external, or both caches, and the
     the displayed table contains only those models that exist in the selected cache(s).
     args: 
@@ -502,16 +499,17 @@ def remove_from_cache(combined, table) -> None:
     # Prompt user to select cache(s) to remove from
     caches = []        # options are: ['internal', 'external', 'both']
     while True:
-        cache_choice = input("Note that \033[1;4mall Tags\033[0m are shown in both caches if you select only one. \
-                             \nRemove models from which cache? (q) exit to menu, (1) internal, (2) external, (3) both? ")
-        if cache_choice in ('q', 'Q'): return
-        elif cache_choice in ('1', '2', '3'):
-            if cache_choice == '1': caches = ['internal']
-            elif cache_choice == '2': caches = ['external']
-            elif cache_choice == '3': caches = ['internal', 'external']
-            break
+        cache_choice = input(f"Note that \033[1;4mall Tags\033[0m are shown in both caches if you select only one. \
+                             \nRemove models from which cache? (1) {ftStr('internal')}, (2) {ftStr('external')}, (3) {ftStr('both')}?\
+                             \nPress Return to exit. ")
+        if cache_choice == '': return
+        elif cache_choice.lower() in ['1', 'i', 'internal']: caches = ['internal']
+        elif cache_choice.lower() == ['2', 'e', 'external']: caches = ['external']
+        elif cache_choice.lower() == ['3', 'b' 'both']: caches = ['internal', 'external']
         else:
             print("Invalid choice. Please try again.")
+            continue
+        break
     
     # Filter combined list based on user's cache selection
     if cache_choice == '1':
