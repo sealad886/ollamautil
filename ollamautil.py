@@ -40,7 +40,7 @@ import shutil
 import ollama
 import re
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 GITPAGE = "https://github.com/sealad886/ollama_util"
 
 def display_welcome() -> None:
@@ -504,20 +504,20 @@ def remove_from_cache(combined, table) -> None:
                              \nPress Return to exit. ")
         if cache_choice == '': return
         elif cache_choice.lower() in ['1', 'i', 'internal']: caches = ['internal']
-        elif cache_choice.lower() == ['2', 'e', 'external']: caches = ['external']
-        elif cache_choice.lower() == ['3', 'b' 'both']: caches = ['internal', 'external']
+        elif cache_choice.lower() in ['2', 'e', 'external']: caches = ['external']
+        elif cache_choice.lower() in ['3', 'b' 'both']: caches = ['internal', 'external']
         else:
             print("Invalid choice. Please try again.")
             continue
         break
     
     # Filter combined list based on user's cache selection
-    if cache_choice == '1':
-        edit_combined = [(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in internal_dict]
-    elif cache_choice == '2':
-        edit_combined = [(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in external_dict]
-    else:
-        edit_combined = combined
+    edit_combined = []
+    if 'internal' in caches:
+        edit_combined.extend([(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in internal_dict and int_weights != ['']])
+    if 'external' in caches:
+        edit_combined.extend([(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in external_dict and ext_weights != ['']])
+    assert edit_combined != []
 
     # Display table with filtered models
     table = display_models_table(edit_combined)
@@ -544,28 +544,42 @@ def remove_from_cache(combined, table) -> None:
 
     print(f"{len(selected_files)} models removed successfully from cache(s): \033[1;4m{','.join(caches)})\033[0m")
 
-def ftStr(word: str, emphasis_index: int = 0) -> str:
-    '''
-    Helper function to format a string as such:
-        selected letter: bold and underlined
-        rest of string: bold only
-    In this use case, to be used to indicate to shell user which additional
-    text inputs are valid options in a menu selection.
+def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
+    """
+    Formats a string with escape chars to bold and underline chosen chars.
 
-    Input:
-        word:  (Required) str  - a string of 
-        emphasis_index: (Optional) int  - index of the letter to emphasize (default=0)
-    '''
+    Parameters:
+        word   (str): String to format; can be of any length including zero.
+        emphasis_index   (int, optional): Index of first emphasized char 
+                                        (default is 0).
+        emphasis_span   (int, optional): Number of consecutive emphasized chars
+                                       after the index (default is 1).
+
+    Returns:
+        str: Formatted string with embedded escape characters.
+
+    Raises:
+        TypeError: If word is not a string or both index and span are not integers.
+        ValueError: If emphasis_index is outside the bounds of the string.
+    """
+    if not isinstance(word, str) or not all(isinstance(arg, int) for arg in 
+                                        [emphasis_index, emphasis_span]):
+        raise TypeError("Word must be a string; emphasis index and span must be integers.")
+    
     word = word.strip()
-    if word == "":
+    if len(word) == 0:
         return ""
-    opt = "\033[1m" + word[:emphasis_index] + "\033[0m"
-    if emphasis_index < len(word):
-        opt += "\033[1;4m" + word[emphasis_index] + "\033[0m"
-    if emphasis_index + 1 < len(word):
-        opt += "\033[1m" + word[emphasis_index + 1:] + "\033[0m"
-    return opt
 
+    if emphasis_index < 0 or emphasis_index >= len(word):
+        raise ValueError("Emphasis index must be between 0 and the length of the string.")
+
+    opt = "\033[1m" + word[:emphasis_index] + "\033[0m"
+    if emphasis_span > 0:
+        opt += "\033[4;1m" + word[emphasis_index:emphasis_index+emphasis_span] + "\033[0m"
+    if emphasis_index + emphasis_span < len(word):
+        opt += "\033[1m" + word[emphasis_index+emphasis_span:] + "\033[0m"
+    
+    return opt
 
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
@@ -574,6 +588,7 @@ def main_menu():
     print(f"2. {ftStr('Toggle')} Ollama internal/external cache")
     print(f"3. {ftStr('Remove')} from cache")
     print(f"4. {ftStr('Pull')} selected models from Ollama.com")
+    print(f"5. {ftStr('Push')} selected models to Ollama.com")
     print(f"Q. {ftStr('Quit')}")
     choice = input("Select: ")
     return choice

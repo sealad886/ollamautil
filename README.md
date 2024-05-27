@@ -71,13 +71,15 @@ This is defaulted in code, but it is not recommended that you rely on this defau
 ## Features
 1. **Copy**: Migrate files between internal and external cache folders.
 2. **Toggle**: Switch between internal and external cache folders.
-3. **Remove**: Remove one or more models from the internal or external cache.
+3. **Remove**: Select one or more (including a range) models to remove from your Ollama cache.
 4. **Pull**: Pull selected models from Ollama.com (in some cases, can help to repair damaged cache).
+5. **Push**: Push selected models to Ollama.com (must have an Ollama.com account and ).
 
 ## Usage
 Run the utility by executing `python ollamautil.py` in your terminal/command prompt.
 Select a feature from the main menu:
 ```
+0. Display cache contents
 1: Copy cache
 2: Toggle internal/external cache
 3: Remove from cache
@@ -140,7 +142,12 @@ Contributors names and contact info
 
 ## Version History
 
-* 0.1
+* 1.1.2
+    * Fixed a couple small errors, made code make more sense including menus that quit when you want them to and more input options.
+* 1.1.0
+    * Bunch of new features, including **bulk remove models** from your Ollama cache! Instead of running `ollama rm <long-ollama-name:some-other-tag>`, OllamaUtil now allows you to safely remove models from your cache. 
+    It uses Ollama's 
+* 0.1.0
     * Initial Release
 
 ## License
@@ -162,5 +169,6 @@ Contributors names and contact info
 ## Acknowledgments
 
 * Thanks to Ollama for creating a great tool for running LLMs.
-* Thanks to the `llama.cpp` project for enabling conversion and quantization of models.
+* Thanks to the (ollama-python)[https://github.com/ollama/ollama-python] project for the Python API hooks!
+* Thanks to the (llama.cpp)[https://github.com/ggerganov/llama.cpp] project for enabling conversion and quantization of models, and getting me interested in AI tinkering. 
 * Thanks to my previous CS professors--apparently I still know a thing or two, or at least pretend to!
