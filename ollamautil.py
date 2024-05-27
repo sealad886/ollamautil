@@ -231,23 +231,24 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
     print(table)
 
     if prompt is None:
-        base_prompt = "Select model/tag items to act on using numbers (e.g. 1, 3, 12-15) or all"
+        base_prompt = "Select model/tag items using numbers (e.g. 1, 3, 12-15)\nEnter \'all\' for all entries, or press Return to quit "
     else:
         base_prompt = prompt
 
     while True:  # Loop until valid input is received
         user_input = "ALL" if bypassGetAll else input(f"{base_prompt}: ").strip()
-        if not is_valid_input(user_input):
-            print(f"Invalid input, contains unpermitted characters: \'{user_input}\'. Please enter a valid selection.")
-            continue
-        
-        if user_input == "":
-            print("No model/tag option selected. Quitting...")
-            return []
-        
         # handle special case of "all" option (i.e. all models)
         if user_input.upper() == "ALL":
             user_input = [int(num) for num in range(1, len(table._rows) + 1)]
+
+        if user_input == "":
+            print("No model/tag option selected.")
+            return []
+
+        # only check this if 'all' hasn't been acted on 
+        if type(user_input) == str and not is_valid_input(user_input):
+            print(f"Invalid input, contains unpermitted characters: \'{user_input}\'. Please enter a valid selection.")
+            continue
         
         # Remove leading/trailing whitespaces and split by comma
         # input() return type is 'str'`
@@ -257,7 +258,7 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
         try:
             ranges = []
             for item in user_input:
-                if '-' in item:  
+                if type(item) == str and '-' in item:  
                     parts = item.split('-')
                     if len(parts) != 2:
                         print(f"Invalid range: \'{item}\'. Please enter a valid range. Original input:\n    '{user_input}'")
@@ -486,7 +487,7 @@ def handle_corrupted_file(file_path: str) -> None:
         os.rename(file_path, corrupted_path)
         print(f"Renamed corrupted file to: {corrupted_path}")
 
-
+# TODO: add something that confirms the user selections and displays the model names to users prior to deletion.
 def remove_from_cache(combined, table) -> None:
     '''Use the ollama Python library to remove models from the Ollama cache.
     User is first prompted to remove models from internal, external, or both caches, and the
