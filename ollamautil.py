@@ -27,7 +27,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# ---------------------------
 import os
 import json
 import ast
@@ -35,12 +34,14 @@ import argparse
 import hashlib
 from prettytable import PrettyTable
 from tqdm import tqdm as tqdm
-from typing import List, Dict, Tuple
+from typing import List, Tuple
 import shutil
 import ollama
-import re
+import warnings
+from copy import deepcopy
+from contextlib import contextmanager
 
-VERSION = "1.1.2"
+VERSION = "2.0.0"
 GITPAGE = "https://github.com/sealad886/ollama_util"
 
 def display_welcome() -> None:
@@ -52,108 +53,120 @@ def display_welcome() -> None:
     welcome_message = f"\033[1;4mOllamaUtil\033[0m (c) 2024\nVersion {VERSION}\nMore info at: {GITPAGE}"
     print(welcome_message)
 
-def walk_dir(directory):
-    files = []
-    for root, dirs, file_list in os.walk(directory):
-        for filename in file_list:
-            if filename in FILE_LIST_IGNORE:
-                continue
+class Model:
+    valid_cache_types = ['internal', 'external']
 
-            if os.access(os.path.join(root, filename), os.R_OK):
-                files.append(os.path.join(root, filename))
-            else:
-                print(f"User doesn't have access to {root}/{filename}. Skipping...")
-    return sorted(files)
+    def __init__(self, config, layers, library, model, version):
+        self.config: dict = config
+        self.layers: dict = layers
+        self.caches: List[Tuple[str,str]] = []
+        self.library: str = library
+        self.model: str = model
+        self.version: str = version
 
-def display_models_table(combined: List[List], table: PrettyTable|None = None):
-    table = get_models_table(combined,table=table) if not table else table
-    print(table)
-    print(f'\nCurrent cache set to:    \033[4m{get_curnow_cache()}\033[0m')
-    return table
+    @property
+    def name(self):
+        if self.library == "library":
+            return f"{self.model}:{self.version}"
+        else:
+            return f"{self.library}/{self.model}:{self.version}"
 
-#TODO: #1 Add a column for disk size of model blob files
-def get_models_table(combined: List[List], table: PrettyTable|None = None):
-    if not table:
-        table = PrettyTable(['Lib', 'Model', 'Tag', 'External', 'Internal'],
-                        title="Ollama GPTs Installed",
-                        left_padding_width=3,
-                        right_padding_width=2,
-                        vertical_align_char='c',
-                        horizontal_align_char='c')
+    @property
+    def manifest(self):
+            return f"{self.library}/{self.model}/{self.version}"
 
-    # Flatten combined into a format suitable for PrettyTable
-    table_rows = []
-    for model_info in combined:
-        model_name, external_weights, internal_weights = model_info
-        all_weights = set(external_weights + internal_weights)
-        for weight in all_weights:
-            exists_in_external = "Yes" if weight in external_weights else "No"
-            exists_in_internal = "Yes" if weight in internal_weights else "No"
-            table_rows.append([model_name.split(os.sep)[-2],
-                               model_name.split(os.sep)[-1],
-                               weight,
-                               exists_in_external,
-                               exists_in_internal])
+    @property
+    def size(self):
+        size = 0
+        if 'size' in self.config:
+            size += self.config['size']
+        for layer in self.layers:
+            if 'size' in layer:
+                size += layer['size']
+        return size
 
-    # Sort rows by model name and then by weight for consistency
-    table_rows.sort(key=lambda x: (x[0], x[1]))
+    def add_cache_flag(self, cache: Tuple[str, str]):
+        if cache[0] not in self.valid_cache_types:
+            warnings.warn(f'Unable to set invalid cache flag for cache type: {cache}.')
+            return
+        if cache not in self.caches:
+            self.caches.append(cache)
 
-    # Add row index and append rows to the table
-    table.add_rows(table_rows)
-    table.add_autoindex("No.")
+    def remove_cache_flag(self, cache: Tuple[str, str]):
+        if cache in self.caches:
+            self.caches.remove(cache)
+        else:
+            warnings.warn(f"Attempted to remove cache flag {cache[0]} from model {self.name}, but that model does not exist in the specified cache.")
 
-    return table
+    def is_in_cache(self, cache_str: str = ""):
+        if cache_str not in self.valid_cache_types:
+            warnings.warn(f"Attempt to check cache {cache_str} but {cache_str} is not a valid cache type.")
+            return False
+        for cache in self.caches:
+            if cache_str in cache: return True
+        return False
 
-def build_ext_int_comb_filelist() -> Tuple[dict, dict, list]:
-    '''
-    Builds and returns external and internal model file lists.
+    def to_dict(self):
+        model_dict = {
+            "name": self.name,
+            "config": self.config,
+            "layers": self.layers,
+            "caches": self.caches,
+            "size": self.size,
+            "library": self.library,
+            "model": self.model,
+            "version": self.version
+        }
+        return model_dict
 
-    Returns:
-        Tuple[Dict, Dict, List]: A tuple containing two dictionaries and a list:
-            - external_dict (Dict): A dictionary with external models and their weights.
-            - internal_dict (Dict): A dictionary with internal models and their weights.
-            - combined_list (List): A list of combined information from both dictionaries.
-    '''
-    # Assuming walk_dir is defined elsewhere and works as expected
-    external_files = walk_dir(ollama_ext_dir + "/manifests")
-    internal_files = walk_dir(ollama_int_dir + "/manifests")
+    def __eq__(self, other):
+        if not isinstance(other, Model):
+            return False
+        return (
+            self.name == other.name and
+            self.get_digests() == other.get_digests()
+        )
 
-    def process_files(files):
-        models_dict = {}
-        for file_path in files:
-            # Adjusted to accommodate additional directory layers
-            parts = file_path.split("/")[-4:]  # This will select superparent/parent/model/weight
-            dict_key = "/".join(parts[:-1])  # superparent/parent/model as key
-            models_dict.setdefault(dict_key, []).append(parts[-1])  # Append weight
-        return models_dict
+    def copy(self):
+        return deepcopy(self)
 
-    # Process files into model: [weights] mapping
-    external_dict = process_files(external_files)
-    internal_dict = process_files(internal_files)
+    def get_digests(self):
+        '''
+        Return a list of the digest/blod file names to be moved. If the manifest file describes the filenames using a ':' character, this returns the file names using a '-' instead.
+        Returns:
+            List of digest filenames, replaces ':' with '-'
+        '''
+        digests = []
+        digests.append(self.config['digest'].replace(':','-'))
+        for layer in self.layers:
+            digests.append(layer['digest'].replace(':','-'))
+        return digests
 
-    '''
-    external_dict = {}
-    for e in external_models:
-        external_dict.setdefault(e[0], []).append(e[1])
+    def get_size(self):
+        def convert_bytes(size):
+            for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+                if size < 1024.0:
+                    return "%3.1f %s" % (size, x)
+                size /= 1024.0
 
-    internal_dict = {}
-    for i in internal_models:
-        internal_dict.setdefault(i[0], []).append(i[1])
-    '''
+            return size
+        return convert_bytes(self.size)
 
-    combined = []
+    def __str__(self):
+        return f"{self.name} ({self.get_size()}): contains {len(self.get_digests())} digests."
 
-    # Combine the external and internal dicts
-    all_model_names = set(external_dict.keys()).union(internal_dict.keys())
-    for model_name in all_model_names:
-        external_weights = external_dict.get(model_name, [])
-        internal_weights = internal_dict.get(model_name, [])
-        combined.append([model_name, external_weights, internal_weights])
+@contextmanager
+def auto_cache_state():
+    original_cache = get_curnow_cache()
+    try:
+        yield
+    finally:
+        _toggle_cache(original_cache, silent=True)
 
-    return external_dict, internal_dict, combined
+def cache_type_to_cache(cache_type: str) -> Tuple[str,str]:
+    return next((cache, path) for cache, path in valid_caches if cache == cache_type)
 
-
-def get_user_confirmation(prompt):
+def get_user_confirmation(prompt:str):
     '''
     Prompts the user with a yes/no question and returns True/False based on the response.
 
@@ -178,365 +191,414 @@ def get_user_confirmation(prompt):
 def get_curnow_cache():
     home = os.path.expanduser("~")
     current_path = os.path.realpath(os.path.join(home, '.ollama', 'models'))
-    current_path = os.path.realpath(os.path.join(home, '.ollama', 'models'))
     curnow = None
     if current_path == ollama_int_dir:
-        curnow = "internal"
+        curnow = ("internal", current_path)
     elif current_path == ollama_ext_dir:
-        curnow = "external"
+        curnow = ("external", current_path)
     else:
         AssertionError(f"Error: somehow managed to get to {current_path}")
 
     return curnow
 
-def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
-    curnow = get_curnow_cache()
+def toggle_cache(skip_conf: bool = False) -> str:
+    curnow, curnow_path = get_curnow_cache()
     toggle_to = {
-        'internal': "external",
-        'external': "internal"
+        'internal': next((cache,path) for cache, path in valid_caches if cache == 'external'),
+        'external': next((cache,path) for cache, path in valid_caches if cache == 'internal')
     }
 
     print(f"Current Ollama cache set to: {curnow.upper()}.")
-    user_conf = get_user_confirmation(f"Would you like to swap symlink to \033[1m{toggle_to[curnow].upper()}\033[0m source? (yN): ")
-    if user_conf: _toggle_cache(toggle_to[curnow])
+    if skip_conf or get_user_confirmation(f"Would you like to swap symlink to \033[1m{toggle_to[curnow][0].upper()}\033[0m source? (yN): "):
+        _toggle_cache(toggle_to[curnow])
     else: print(f"No changes to Ollama cache pointer made. Still using \033[1;4m{curnow.upper()}\033[0m.")
 
-def _toggle_cache(toggle_target: str):
-    if toggle_target == "internal":
+def _toggle_cache(toggle_target: Tuple[str, str], *, silent = False) -> str:
+    '''
+    WARNING: any calling function should ensure that the cache state is returned to the original state when that function returns
+    Change the cache symlinked at $HOME/.ollama.
+    '''
+    if not is_cache_available(toggle_target):
+        warnings.warn(f"Target cache toggle {toggle_target[0].upper()} is not available.")
+        return
+    if toggle_target[0] == "internal":
         os.system(f"ln -s -F -f -h {ollama_int_dir} ${{HOME}}/.ollama/models")
-        print(f"Changed .ollama symlink to look to INTERNAL drive.")
+        if not silent: print(f"Changed .ollama symlink to look to INTERNAL drive.")
         return "external"
-    elif toggle_target == "external":
+    elif toggle_target[0] == "external":
         os.system(f"ln -s -F -f -h {ollama_ext_dir} ${{HOME}}/.ollama/models")
-        print(f"Changed .ollama symlink to look to EXTERNAL drive.")
+        if not silent: print(f"Changed .ollama symlink to look to EXTERNAL drive.")
         return "internal"
     else:
-        print(f'Cache target not toggled. Requested target \'{toggle_target}\' not defined.')
+        warnings.warn(f'Cache target not toggled. Requested target \'{toggle_target[0]}\' not defined.')
 
-def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: bool = True, bypassGetAll: bool = False) -> List[List[str]]:
-    def is_valid_input(user_input) -> bool:
-        pattern = r"^[\d,0-9\s\-]+$"
-        if re.match(pattern, user_input):
-            return True
+def models_in_cache_list() -> List[Tuple[str,str,str]]:
+    model_list = ollama.list()['models']
+    model_names: List[str] = []
+    for mod in model_list:
+        model_names.append(mod['name'])
+    for i,name in enumerate(model_names):
+        if "/" in name:
+            fq_library, fq_model = name.split('/',1)
+            fq_model, fq_version = fq_model.split(':',1)
         else:
-            return False
+            fq_library = 'library'
+            fq_model, fq_version = name.split(':',1)
+        model_names[i] = (fq_library, fq_model, fq_version)
+    return model_names
 
-    selected_files = []
-    print(table)
+@auto_cache_state()
+def build_model_list(models: List[Model], *, force_rebuild: bool = False) -> list:
+    if models != [] and not force_rebuild:
+        warnings.warn(f"Attempted to build_model_list, but the model_list is already built. Use force_rebuild=True if the list should be rebuilt regardless.")
+        return
+    caches = available_caches()
+    # print(f'Available caches: {[c[0] for c in caches]}')
+    for cache, cache_path in caches:
+        _toggle_cache((cache, cache_path), silent=True)
+        skipped_models = 0
+        manifest_path = os.path.join(cache_path, "manifests", "registry.ollama.ai")
+        for model in models_in_cache_list():
+            try:
+                with open(os.path.join(manifest_path, *model),'r') as man:
+                    manifest = json.load(man)
+            except OSError as e:
+                warnings.warn(f"Attempting to read manifest {model}, cached files do not exist.", source=e)
+                continue
+            new_model = Model(
+                manifest['config'],
+                manifest['layers'],
+                *model
+            )
+            new_model.add_cache_flag((cache, cache_path))
+            pass
+            existing_model: Model = next((m for m in models if m == new_model), None)
+            if existing_model:
+                existing_model.add_cache_flag((cache,cache_path))
+                skipped_models += 1
+            else:
+                models.append(new_model)
 
-    if prompt is None:
-        base_prompt = "Select model/tag items using numbers (e.g. 1, 3, 12-15)\nEnter \'all\' for all entries, or press Return to quit "
-    else:
-        base_prompt = prompt
+    return models
 
-    while True:  # Loop until valid input is received
-        user_input = "ALL" if bypassGetAll else input(f"{base_prompt}: ").strip()
-        # handle special case of "all" option (i.e. all models)
-        if user_input.upper() == "ALL":
-            user_input = [int(num) for num in range(1, len(table._rows) + 1)]
+def is_cache_available(cache_tuple: str) -> bool:
+    return os.path.isdir(cache_tuple[1])
 
-        if user_input == "":
-            print("No model/tag option selected.")
-            return []
+def available_caches() -> List[Tuple[str,str]]:
+    available_caches = []
+    for cache in valid_caches:
+        if is_cache_available(cache): available_caches.append(cache)
+    return available_caches
 
-        # only check this if 'all' hasn't been acted on
-        if type(user_input) == str and not is_valid_input(user_input):
-            print(f"Invalid input, contains unpermitted characters: \'{user_input}\'. Please enter a valid selection.")
-            continue
-
-        # Remove leading/trailing whitespaces and split by comma
-        # input() return type is 'str'`
-        if type(user_input) == str:
-            user_input = [num.strip() for num in user_input.split(",")]
-
-        try:
-            ranges = []
-            for item in user_input:
-                if type(item) == str and '-' in item:
-                    parts = item.split('-')
-                    if len(parts) != 2:
-                        print(f"Invalid range: \'{item}\'. Please enter a valid range. Original input:\n    '{user_input}'")
-                        continue
-                    start, end = map(lambda x: int(x.strip()), parts)
-                    ranges.extend(range(start, end + 1))
-                else:
-                    ranges.append(int(item))
-
-            # Remove duplicates and sort the list
-            ranges = sorted(set(ranges))
-
-            for i in ranges:
-                selected_files.append(table._rows[i - 1][1:-2])
-        except ValueError:
-            print(f"Invalid input '{user_input}'. Please enter numbers separated by commas.")
-            continue
-
-        if not allow_multiples and len(selected_files) > 1:
-            print("Multiple selections are not allowed. Please select only one model.")
-            continue
-
-        return selected_files
-
-def pull_models(combined, table: PrettyTable|None = None, prompt: str|None = None, allow_multiples: bool = True):
-    if table is None: table = display_models_table(combined)
-
-    # Call 'select_models()' function and store the result in a list of files to pull
-    sel_dirfil = select_models(table, prompt=prompt, allow_multiples=allow_multiples)
-
-    for weight in sel_dirfil:
-        # construct the model name/path for Ollama.com specifically
-        if weight[0] != 'library':
-            model_path = weight[0] + "/" + weight[1] + ":" + weight[2]
-        else:
-            model_path = weight[1] + ":" + weight[2]
-        print(f'Pulling {model_path} from Ollama.com...')
-        ollama.pull(model_path)
-
-def push_models(combined, table: PrettyTable|None = None):
-    '''
-    Push models from a table to Ollama.com.
+def display_models(models: List[Model]) -> None:
+    """
+    Display the list of models and their metadata using PrettyTable.
 
     Parameters:
-        combined (list): A list of lists containing model information.
-        table (PrettyTable|None): Optional; a PrettyTable object for displaying models. If None, a new table will be created.
+    models (List[Model]): The list of Model objects to display.
+    """
+    # Create a PrettyTable object
+    table = PrettyTable()
 
-    Returns:
-        None
-    '''
-    if table is None: table = display_models_table(combined)
+    # Set the field names (column headers)
+    table.field_names = ["Library", "Model", "Version", "Size", "Int?", "Ext?"]
 
-    sel_dirfil = select_models(table)
+    # Add rows to the table for each model
+    for model in models:
+        table.add_row([model.library, model.model, model.version, model.get_size(), model.is_in_cache('internal'), model.is_in_cache('external')])
 
-    for weight in sel_dirfil:
-        # construct the model name/path for Ollama.com specifically
-        if weight[0] != 'library':
-            model_path = weight[0] + "/" + weight[1] + ":" + weight[2]
-        else:
-            print(f"Only personal repos are supported at this time. To upload to your personal repository, models must be saved as: \
-                  \n      <username>/<model>\
-                  \n  eg. sealad886/llama3:my_customization\
-                  \n  eg. <username>/{':'.join(weight[1:2])}")
-            continue
-        print(f'Pushing {model_path} to Ollama.com...')
-        ollama.push(model_path)
+    table.add_autoindex("No.")
 
-def migrate_cache_user(table, combined):
-    if combined == []:
-        external_dict, internal_dict, combined = build_ext_int_comb_filelist()
-    source_files = []
-    if table is None:
-        table = display_models_table(combined)
+    # Print the table
+    print(table)
 
-    selected_files = select_models(table, None, True, bypassGetAll=False)
-    if selected_files == []:
-        print("No models selected. Quitting...")
+def copy_models_cache_to_cache(models: List[Model]):
+    def convert_bytes(size):
+            for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+                if size < 1024.0:
+                    return "%3.1f %s" % (size, x)
+                size /= 1024.0
+
+            return size
+    # Step 1: Confirm the current and target caches
+    current_cache = get_curnow_cache()
+    if len(valid_caches) == 2:
+        target_cache = next((cache for cache in valid_caches if cache != current_cache))
+    else:
+        print("Multiple caches found.")
+        for i, cache in enumerate(valid_caches):
+            print(f"{i + 1}. {cache[0].capitalize()} ({cache[1]})")
+        target_choice = int(input("Select the target cache number: ")) - 1
+        target_cache = valid_caches[target_choice]
+
+    if current_cache == target_cache:
+        print("Current cache and target cache are the same. No action taken.")
         return
 
-    which_direction = input("Move from:\n(1) external to internal\n(2) internal to external\n(1 or 2): ")
-    overwrite = input("If the model already exists, should it be overwritten? (y/N): ").lower() in ("y", "yes")
+    # Step 2: Display available models
+    selected_models = user_select_models(models)
 
-    migrate_cache(table=table, combined=combined, selected_files=selected_files, bypassGetAll=False, overwrite=overwrite, which_direction=which_direction)
+    if not selected_models:
+        print("No valid models selected. Exiting copy operation.")
+        return
+
+    # Step 3: Build the list of files to copy
+    files_to_copy = build_files_to_copy(selected_models, current_cache)
+    # Check if files already exist in the destination cache
+    target_cache_path = target_cache[1]
+    existing_files = [
+        f for f in files_to_copy if os.path.exists(f.replace(current_cache[1], target_cache_path))
+    ]
+
+    if existing_files:
+        print(f"\nOf {len(files_to_copy)} total files, {len(existing_files)} files already exist in the destination cache.")
+
+        overwrite = get_user_confirmation("Do you want to overwrite these files?")
+        if not overwrite:
+            # Remove the existing files from the list of files to copy
+            files_to_copy = [f for f in files_to_copy if f not in existing_files]
+
+    if not files_to_copy:
+        print("No files to copy. Exiting copy operation.")
+        return
+
+    # Step 4: Confirm transfer details
+    print(f"Copying from {current_cache[0]} to {target_cache[0]}.")
+    total_size = sum(os.path.getsize(f) for f in files_to_copy)
+    print(f"Total files to copy: {len(files_to_copy)} {f'(excluding {len(existing_files)} existing files)' if not overwrite else ''}")
+    print(f"Total size: {convert_bytes(total_size)}")
+
+    if not get_user_confirmation("Proceed with the transfer? "):
+        print("Transfer cancelled by the user.")
+        return
+
+    # Step 5: Copy files and verify integrity
+    copy_files(files_to_copy, current_cache, target_cache)
+
+    # Step 6: Handle any errors and cleanup if necessary
+    print("Transfer completed successfully.")
 
 
-def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_files: list = [], which_direction: int = None, bypassGetAll: bool = False, overwrite: bool = False) -> None:
-    source_files = []
-    sel_dirfil = [os.sep.join(tmpvar) for tmpvar in selected_files]
+def parse_indices(indices: str, models: List) -> List:
+    """
+    Parse user input indices to select models.
 
-    # Define source and destination directories
-    source_dir = ollama_ext_dir if which_direction == '1' else ollama_int_dir
-    dest_dir = ollama_int_dir if which_direction == '1' else ollama_ext_dir
+    Args:
+        indices (str): The indices entered by the user.
+        models (List[Model]): The list of models.
 
-    # Get the files from the selected directories
-    for file_path in walk_dir(os.path.join(source_dir, "manifests")):
-        # Normalize the file path to use consistent separators
-        normalized_path = os.path.normpath(file_path)
-
-        # Extract the last three segments of the path
-        path_segments = normalized_path.split(os.sep)[-3:]
-
-        # Re-join the last two segments and check if this combination is in sel_dirfil
-        dir_file_combination = os.sep.join(path_segments)
-        if dir_file_combination in sel_dirfil:
-            source_files.append(file_path)
-
-    for source_file in source_files:
-        dest_file = os.path.join(dest_dir, os.sep.join(source_file.split('/models/')[1:]))
-
-        # Ensure the destination directory exists
-        os.makedirs(os.path.dirname(dest_file), exist_ok=True)
-
-        # Copy the manifest file if overwrite is True or if the file does not exist in the destination
-        if overwrite or not os.path.exists(dest_file):
-            with tqdm(total=os.stat(source_file).st_size, unit='B', unit_scale=True, desc=f"Copying {os.path.basename(dest_file)}") as pbar:
-                with open(source_file, 'rb') as src, open(dest_file, 'wb') as dst:
-                    for chunk in iter(lambda: src.read(4096), b""):
-                        dst.write(chunk)
-                        pbar.update(len(chunk))
-                copy_metadata(source_file, dest_file)
-            print(f"Copied {source_file} to {dest_file}")
-        else:
-            None
-
-        # Now deal with the blobs
-        copy_blob_files(source_file=source_file, dest_file=dest_file, source_dir=source_dir, dest_dir=dest_dir, overwrite=overwrite)
-
-        # Now tell Ollama that these exist again
-        # os.system(f"ollama pull {':'.join(os.path.normpath(source_file).split(os.sep)[-2:])}")
-
-# Assuming source_file is the path to the manifest file
-def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
-    # load manifest
-    blob_hash_prefix = "sha256-"
-    bb_px_len = len(blob_hash_prefix)
-    manifest_data = []
-    try:
-        with open(source_file, 'r') as f:
-            rawdata = json.load(f)
-    except Exception as e:
-        print(f"Error loading manifest: {e}")
-        assert rawdata is not None
+    Returns:
+        List[Model]: The list of selected models.
+    """
+    selected = []
+    if indices.lower() == 'all': selected = models
     else:
-        manifest_data.append(rawdata['config']['digest'][bb_px_len:])
-        manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
-
-    for blob_digest in manifest_data:
-        source_blob = os.path.join(source_dir, "blobs", blob_hash_prefix + blob_digest)
-        dest_blob_dir = os.path.join(dest_dir, "blobs")
-        dest_blob = os.path.join(dest_blob_dir, blob_hash_prefix + blob_digest)
-
-        # Ensure the destination blob directory exists
-        os.makedirs(dest_blob_dir, exist_ok=True)
-
-        # Copy the blob file if overwrite is True or if the blob does not exist in the destination
-        if overwrite or not os.path.exists(dest_blob):
-            with tqdm(total=os.stat(source_blob).st_size, unit='B', unit_scale=True, desc=f"Copying {blob_digest}") as pbar:
-                with open(source_blob, 'rb') as src, open(dest_blob, 'wb') as dst:
-                    for chunk in iter(lambda: src.read(4096), b""):
-                        dst.write(chunk)
-                        pbar.update(len(chunk))
-                copy_metadata(source_blob, dest_blob)
-            print(f"Copied {source_blob} to {dest_blob}")
-
-            # Validate SHA-256 hash of copied blob
-            validate_blob_sha256(dest_blob, blob_hash_prefix, blob_hash_prefix + blob_digest)
-
-def validate_blob_sha256(dest_blob: str, blob_hash_prefix: str, expected_digest: str = ""):
-    sha256_hash = hashlib.sha256()
-    try:
-        with open(dest_blob, 'rb') as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(chunk)
-        actual_chksum = sha256_hash.hexdigest()
-        actual_digest = blob_hash_prefix + actual_chksum
-        if expected_digest == "":
-            print(f"Expected checksum for {dest_blob} not given. For your information, it is: {actual_chksum}")
-        if actual_digest != expected_digest:
-            print(f"Error: Digest does not match for {dest_blob}.\n    Expected {expected_digest}, got {actual_digest}.")
-            handle_corrupted_file(dest_blob)
-    except Exception as e:
-        print(f"Error validating blob: {e}")
-
-    print(f"Checksum verified: {dest_blob}")
-
-def copy_metadata(src: str, dst: str) -> None:
-    """
-    Copies metadata and other attributes from the source file to the destination file.
-
-    Args:
-        src (str): The path to the source file.
-        dst (str): The path to the destination file.
-
-    Returns:
-        None
-    """
-    try:
-        shutil.copystat(src, dst)
-        # TODO: decide if updating the parent directory information is the right thing to do. Probably yes, but make the deicion later.
-        shutil.copystat(os.path.dirname(src), os.path.dirname(dst))
-    except Exception as e:
-        print(f'Unable to copy metadata and other attributes for {os.path.basename(dst)}. Continuing with copy.')
-
-def handle_corrupted_file(file_path: str) -> None:
-    """
-    Handles a corrupted file by asking the user if they want to keep it.
-
-    Args:
-        file_path (str): The path to the corrupted file.
-
-    Returns:
-        None
-    """
-    response = input("Keep corrupted file on target disk? (y/N): ").lower()
-    if response not in ('y', 'yes'):
         try:
-            os.remove(file_path)
-            print(f"Removed corrupted file: {file_path}")
-        except Exception as e:
-            print(f"Error removing corrupted file: {e}")
-    else:
-        corrupted_path = file_path + "_corrupted"
-        os.rename(file_path, corrupted_path)
-        print(f"Renamed corrupted file to: {corrupted_path}")
+            ranges = indices.split(',')
+            for r in ranges:
+                if '-' in r:
+                    start, end = map(int, r.split('-'))
+                    selected.extend(models[start - 1:end])
+                else:
+                    selected.append(models[int(r) - 1])
+        except (ValueError, IndexError):
+            print("Invalid selection. Please enter valid indices.")
+    return selected
 
-# TODO: add something that confirms the user selections and displays the model names to users prior to deletion.
-def remove_from_cache(combined, table) -> None:
-    '''Use the Ollama Python library to remove models from the Ollama cache.
-    User is first prompted to remove models from internal, external, or both caches, and the
-    the displayed table contains only those models that exist in the selected cache(s).
-    args:
-        combined  (list): list of tuples containing model names and their corresponding file paths.
-        table  (PrettyTable): PrettyTable object cached in memory containing the table to display
-    output: None
-    '''
-    external_dict, internal_dict, _ = build_ext_int_comb_filelist()
 
-    # Prompt user to select cache(s) to remove from
-    caches = []        # options are: ['internal', 'external', 'both']
-    while True:
-        cache_choice = input(f"Note that \033[1;4mall Tags\033[0m are shown in both caches if you select only one. \
-                             \nRemove models from which cache? (1) {ftStr('internal')}, (2) {ftStr('external')}, (3) {ftStr('both')}?\
-                             \nPress Return to exit. ")
-        if cache_choice == '': return
-        elif cache_choice.lower() in ['1', 'i', 'internal']: caches = ['internal']
-        elif cache_choice.lower() in ['2', 'e', 'external']: caches = ['external']
-        elif cache_choice.lower() in ['3', 'b' 'both']: caches = ['internal', 'external']
-        else:
-            print("Invalid choice. Please try again.")
-            continue
-        break
+def build_files_to_copy(models: List[Model], current_cache: Tuple[str, str]) -> List[str]:
+    """
+    Build the list of files to copy for the selected models.
 
-    # Filter combined list based on user's cache selection
-    edit_combined = []
-    if 'internal' in caches:
-        edit_combined.extend([(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in internal_dict and int_weights != ['']])
-    if 'external' in caches:
-        edit_combined.extend([(model, ext_weights, int_weights) for model, ext_weights, int_weights in combined if model in external_dict and ext_weights != ['']])
-    assert edit_combined != []
+    Args:
+        models (List[Model]): The selected models.
+        current_cache (Tuple[str, str]): The current cache.
 
-    # Display table with filtered models
-    table = display_models_table(edit_combined)
+    Returns:
+        List[str]: The list of file paths to copy.
+    """
+    files_to_copy = set()
+    for model in models:
+        for digest in model.get_digests():
+            digest_path = os.path.join(current_cache[1], 'blobs',  digest)
+            if os.path.exists(digest_path):
+                files_to_copy.add(digest_path)
+        manifest_path = os.path.join(current_cache[1], 'manifests', 'registry.ollama.ai', model.manifest)
+        if os.path.exists(manifest_path):
+            files_to_copy.add(manifest_path)
+    return list(files_to_copy)
+
+
+def copy_files(files_to_copy: List[str], current_cache: Tuple[str, str], target_cache: Tuple[str, str]) -> None:
+    """
+    Copy the files and verify integrity.
+
+    Args:
+        files_to_copy (List[str]): The files to copy.
+        current_cache (Tuple[str, str]): The current cache.
+        target_cache (Tuple[str, str]): The target cache.
+    """
+    target_dir = target_cache[1]
+    for file in tqdm(files_to_copy, desc="Copying files", unit="file", dynamic_ncols=True, miniters=1):
+        target_file = file.replace(current_cache[1], target_dir)
+        target_dir_path = os.path.realpath(os.path.dirname(target_file))
+        os.makedirs(target_dir_path, exist_ok=True)
+        shutil.copy2(file, target_file)
+        if not file_integrity_check(file, target_file):
+            warnings.warn(f"Integrity check failed for file: {file}")
+
+
+def file_integrity_check(source_file: str, target_file: str) -> bool:
+    """
+    Check if the copied file has the same hash as the source file.
+
+    Args:
+        source_file (str): The source file.
+        target_file (str): The target file.
+
+    Returns:
+        bool: True if integrity is intact, False otherwise.
+    """
+    return file_hash(source_file) == file_hash(target_file)
+
+
+def file_hash(file_path: str) -> str:
+    """
+    Calculate the hash of a file.
+
+    Args:
+        file_path (str): The path to the file.
+
+    Returns:
+        str: The hash of the file.
+    """
+    hash_md5 = hashlib.md5()
+    buffer_size = 65536
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(buffer_size), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+def user_select_models(models):
+    display_models(models)
+    model_indices = input("\nSelect models by index (e.g., 1,2,3 or 1-3): ")
+    selected_models = parse_indices(model_indices, models)
+    return selected_models
+
+def user_select_cache(curcache, avail_caches):
+    for i, av_c in enumerate(avail_caches):
+        print(f"{"*" if cache_type_to_cache(curcache) == av_c else ''}{i+1} {av_c}")
+    print("* indicates current cache")
+    selected = input("Which cache(s) should models be removed from? (e.g. 1,2,3 or 1-3): ")
+    return parse_indices(selected, avail_caches)
+
+@auto_cache_state()
+def remove_model_from_cache(models: List[Model]) -> None:
+    """
+    Remove one or more models from the specified cache.
+    Prompts the user to select models to remove, confirms the action, and deletes the relevant files.
+
+    Parameters:
+    models (List[Model]): The list of available Model objects.
+    """
+
+    # Display available models for removal
+    display_models(models)
+    current_cache_type, current_cache_path = get_curnow_cache()
 
     # Prompt user to select models to remove
-    selected_files = select_models(table, None, True, bypassGetAll=False)
-    if selected_files == []:
-        print("No models selected. Quitting...")
+    selected_models = user_select_models(models)
+
+    # Validate the selection
+    if not selected_models:
+        print("No valid models selected. Operation canceled.")
         return
 
-    # Remove selected models from cache using Ollama Python API
-    curnow = get_curnow_cache()
-    for cache in caches:
-        _toggle_cache(cache)
-        print(f"Removing models from \033[48;5;19m{cache}\033[48;5;0m cache...")
-        for model in selected_files:
-            model_parsed = os.sep.join([piece for piece in model[:-1] if piece not in ["library", "latest"]])
-            if model[-1] == 'latest': model_parsed = model_parsed + ":latest"
-            print(f"Removing {model_parsed} from cache...", end='', flush=True)
-            status = ollama.delete(model_parsed)
-            if status == 'success': print(f"Removing {model_parsed} from cache...Done!", end='\n', flush=False)
-            elif status == 'error': print(f"Removing {model_parsed} from cache...Error!", end='\n', flush=False)
-    _toggle_cache(curnow)   # important to return cache target back to prior state
+    # Prompt user to select cache(s)
+    selected_caches = user_select_cache(current_cache_type, available_caches())
+    if not selected_caches:
+        print("No caches selected. Operation canceled.")
+        return
 
-    print(f"{len(selected_files)} models removed successfully from cache(s): \033[1;4m{','.join(caches)})\033[0m")
+    print("\nSelected models for removal:")
+    for model in selected_models:
+        print(f" - {model.name}")
+    print(f"Models will be removed from the following cache(s): {[c[0] for c in selected_caches]}")
+
+    # Confirm with the user before proceeding
+    if not get_user_confirmation("This operation can not be undone.\nAre you sure you want to remove the above models?"):
+        print("Removal canceled.")
+        return
+
+    # Remove the selected models
+    for cache in selected_caches:
+        _toggle_cache(cache)
+        for model in tqdm(selected_models,desc="Deleting models",unit="models",dynamic_ncols=True):
+            ollama.delete(model.name)
+
+        # I think ollama.list() will force the ollama server to do its cleanup activites?
+        _ = ollama.list()
+    # Display results
+    print(f"Removed {len(selected_models)} models successfully.")
+
+    # Refresh models list after removal
+    models = build_model_list(models, force_rebuild=True)
+
+def pull_models(models: List[Model]) -> None:
+    """
+    Pull selected models from Ollama.com.
+
+    Args:
+        models (List[Model]): The list of available Model objects.
+    """
+    selected_models = user_select_models(models)
+
+    if not selected_models:
+        print("No valid models selected. Operation canceled.")
+        return
+
+    print("\nSelected models to pull:")
+    for model in selected_models:
+        print(f" - {model.name}")
+
+    # Confirm with the user before proceeding
+    if not get_user_confirmation("This operation may take some time depending on the number of models and your connection speed.\nAre you sure you want to pull the above models?"):
+        print("Pull operation canceled.")
+        return
+
+    for model in tqdm(selected_models, desc="Pulling models", unit="models", dynamic_ncols=True):
+        ollama.pull(model.name)
+
+    print(f"Pulled {len(selected_models)} models successfully.")
+
+def push_models(models: List[Model]) -> None:
+    """
+    Push selected models to Ollama.com.
+
+    Args:
+        models (List[Model]): The list of available Model objects.
+    """
+    selected_models = user_select_models(models)
+
+    if not selected_models:
+        print("No valid models selected. Operation canceled.")
+        return
+
+    print("\nSelected models to push:")
+    for model in selected_models:
+        print(f" - {model.name}")
+
+    # Confirm with the user before proceeding
+    if not get_user_confirmation("This operation may take some time depending on the number of models and your connection speed.\nAre you sure you want to push the above models?"):
+        print("Push operation canceled.")
+        return
+
+    for model in tqdm(selected_models, desc="Pushing models", unit="models", dynamic_ncols=True):
+        ollama.push(model.name)
+
+    print(f"Pushed {len(selected_models)} models successfully.")
+
+
 
 def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
     """
@@ -575,6 +637,35 @@ def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
 
     return opt
 
+def process_choice(choice: str, models: List[Model]):
+    choice = choice.lower()
+    if choice in ['0', 'd', 'display']:
+        print(f"{ftStr('Display')} contents of internal and external cache directories in a table.")
+        display_models(models)
+    elif choice in ['1', 'c', 'copy']:
+        print(f"{ftStr('Copy')} cache: migrate files between internal and external cache folders.")
+        copy_models_cache_to_cache(models)
+    elif choice in ['2', 't', 'toggle']:
+        print(f"{ftStr('Toggle')} Ollama Int/Ext Cache: Swtich between internal and external cache folders.")
+        toggle_cache()
+    elif choice in ['3', 'r', 'remove']:
+        print(f"{ftStr('Remove')} from cache: remove one or more model/tag from internal or external cache.")
+        remove_model_from_cache(models)
+    elif choice in ['4', 'p', 'pull']:
+        print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist. Useful to repair cache that has missing files.")
+        pull_models(models)
+    elif choice in [5, 'u', 'push']:
+        print(f"ftStr('Push',1) selected models to Ollama.com.")
+        push_models(models)
+    elif choice in ['Q', 'q', 'quit']:
+        print(f"{ftStr('Quit')} utility, exiting...")
+        exit()
+    else:
+        print("Invalid choice, please try again.")
+        return
+
+    input("Press return to continue...")
+
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
     print(f"0. {ftStr('Display')} cache contents")
@@ -587,59 +678,32 @@ def main_menu():
     choice = input("Select: ")
     return choice
 
-def process_choice(choice: str, combined, models_table: PrettyTable|None = None):
-    choice = choice.lower()
-    if choice in ['0', 'd', 'display']:
-        print(f"{ftStr('Display')} contents of internal and external cache directories in a table.")
-        display_models_table(combined, models_table)
-    elif choice in ['1', 'c', 'copy']:
-        print(f"{ftStr('Copy')} cache: migrate files between internal and external cache folders.")
-        migrate_cache_user(models_table, combined)
-    elif choice in ['2', 't', 'toggle']:
-        print(f"{ftStr('Toggle')} Ollama Int/Ext Cache: Swtich between internal and external cache folders.")
-        toggle_int_ext_cache(combined=combined, table=models_table)
-    elif choice in ['3', 'r', 'remove']:
-        print(f"{ftStr('Remove')} from cache: remove one or more model/tag from internal or external cache.")
-        remove_from_cache(combined, models_table)
-    elif choice in ['4', 'p', 'pull']:
-        print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist. Useful to repair cache that has missing files.")
-        pull_models(combined, models_table)
-    elif choice in [5, 'u', 'push']:
-        print(f"ftStr('Push',1) selected models to Ollama.com.")
-        push_models(combined, models_table)
-    elif choice in ['Q', 'q', 'quit']:
-        print(f"{ftStr('Quit')} utility, exiting...")
-        exit()
-    else:
-        print("Invalid choice, please try again.")
-        return
-
-    input("Press return to continue...")
-
 def main() -> None:
-    '''
-    Display main menu and basic high-level handling.
-    '''
-    # Assuming 'combined' is your list of models and weights
+    models = []
+    build_model_list(models)
     choice = None
     while True:
-
-        # re-build the table every time you return to the main menu
-        _, _, combined = build_ext_int_comb_filelist()
-        models_table = get_models_table(combined)
         if choice is None: display_welcome()
         choice = main_menu()
-        process_choice(choice, combined, models_table=models_table)
+        process_choice(choice, models)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Ollamautil", description="Command line utility to manage the Ollama cache and make it easier to maintain a larger externally cached database and move models on- and off-device. Assumes Ollama defaults on installation (namely ~/.ollama is default directory) is used.\n\nBefore using this utility, you should configure OLLAMAUTIL_INTERNAL_DIR and OLLAMAUTIL_EXTERNAL_DIR to point to the \033[1mmodels/\033[0m directory in your internal and external caches, respectively.]]")
     # define the default source directories (no training delimiter)
     # points to path of internal "modules" directory
+    global ollama_int_dir
     ollama_int_dir = os.getenv("OLLAMAUTIL_INTERNAL_DIR")
     # points to path of external "modules" directory
+    global ollama_ext_dir
     ollama_ext_dir = os.getenv("OLLAMAUTIL_EXTERNAL_DIR")
+    global valid_caches
+    valid_caches = [
+        ('internal', ollama_int_dir),
+        ('external', ollama_ext_dir)
+    ]
     # Note that this should be set as '["val1" "val2"]' in the environment global other this won't load properly
     try:
+        global ollama_file_ignore
         ollama_file_ignore = ast.literal_eval(os.getenv("OLLAMAUTIL_FILE_IGNORE"))
     except:
         print("\033[1mOLLAMAUTIL_FILE_IGNORE not set, using defaults.\033[0m")
