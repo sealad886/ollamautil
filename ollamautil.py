@@ -1,7 +1,7 @@
 #!/Users/andrew/venvs/ollamautil/bin/python
 # To make this executable, update shebang to your python executable
 # (this should be your venv/bin/python file usually, not /usr/bin/python)
-# To run as a command line util, run 'CHMOD +x ollamautil.py', and then put 
+# To run as a command line util, run 'CHMOD +x ollamautil.py', and then put
 # the final executable in your PATH. Optionally remove .py from the filename.
 # command line execution: ollamautil
 # ---------------------------
@@ -14,7 +14,7 @@
 #
 # ---------------------------
 # Copyright (C) 2024  Andrew M. Cox
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -76,7 +76,7 @@ def get_models_table(combined: List[List], table: PrettyTable|None = None):
     if not table:
         table = PrettyTable(['Lib', 'Model', 'Tag', 'External', 'Internal'],
                         title="Ollama GPTs Installed",
-                        left_padding_width=3, 
+                        left_padding_width=3,
                         right_padding_width=2,
                         vertical_align_char='c',
                         horizontal_align_char='c')
@@ -89,10 +89,10 @@ def get_models_table(combined: List[List], table: PrettyTable|None = None):
         for weight in all_weights:
             exists_in_external = "Yes" if weight in external_weights else "No"
             exists_in_internal = "Yes" if weight in internal_weights else "No"
-            table_rows.append([model_name.split(os.sep)[-2], 
+            table_rows.append([model_name.split(os.sep)[-2],
                                model_name.split(os.sep)[-1],
-                               weight, 
-                               exists_in_external, 
+                               weight,
+                               exists_in_external,
                                exists_in_internal])
 
     # Sort rows by model name and then by weight for consistency
@@ -104,7 +104,7 @@ def get_models_table(combined: List[List], table: PrettyTable|None = None):
 
     return table
 
-def build_ext_int_comb_filelist() -> Tuple[dict, dict, list]: 
+def build_ext_int_comb_filelist() -> Tuple[dict, dict, list]:
     '''
     Builds and returns external and internal model file lists.
 
@@ -168,7 +168,7 @@ def get_user_confirmation(prompt):
     while True:
         # Ask the user and get the response
         user_response = input(f"{prompt} (yes/no): ").lower()
-        
+
         # Validate and process the response
         if user_response in valid_responses:
             return valid_responses[user_response]
@@ -186,7 +186,7 @@ def get_curnow_cache():
         curnow = "external"
     else:
         AssertionError(f"Error: somehow managed to get to {current_path}")
-    
+
     return curnow
 
 def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
@@ -195,12 +195,6 @@ def toggle_int_ext_cache(combined, table: PrettyTable = None) -> str:
         'internal': "external",
         'external': "internal"
     }
-    
-    table = display_models_table(combined=combined, table=table)
-    print("Review which models are available in which cache carefully.\n\n")
-    if get_user_confirmation("Would you like to move cache files first? (Note: will not overwrite existing files): "):
-        direction = '1' if curnow == "external" else '0'
-        migrate_cache(table=table, combined=combined, bypassGetAll=True, which_direction=direction, overwrite=False)
 
     print(f"Current Ollama cache set to: {curnow.upper()}.")
     user_conf = get_user_confirmation(f"Would you like to swap symlink to \033[1m{toggle_to[curnow].upper()}\033[0m source? (yN): ")
@@ -226,7 +220,7 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
             return True
         else:
             return False
-        
+
     selected_files = []
     print(table)
 
@@ -245,11 +239,11 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
             print("No model/tag option selected.")
             return []
 
-        # only check this if 'all' hasn't been acted on 
+        # only check this if 'all' hasn't been acted on
         if type(user_input) == str and not is_valid_input(user_input):
             print(f"Invalid input, contains unpermitted characters: \'{user_input}\'. Please enter a valid selection.")
             continue
-        
+
         # Remove leading/trailing whitespaces and split by comma
         # input() return type is 'str'`
         if type(user_input) == str:
@@ -258,37 +252,37 @@ def select_models(table: PrettyTable, prompt: str | None = "", allow_multiples: 
         try:
             ranges = []
             for item in user_input:
-                if type(item) == str and '-' in item:  
+                if type(item) == str and '-' in item:
                     parts = item.split('-')
                     if len(parts) != 2:
                         print(f"Invalid range: \'{item}\'. Please enter a valid range. Original input:\n    '{user_input}'")
                         continue
                     start, end = map(lambda x: int(x.strip()), parts)
                     ranges.extend(range(start, end + 1))
-                else:  
+                else:
                     ranges.append(int(item))
-            
+
             # Remove duplicates and sort the list
             ranges = sorted(set(ranges))
-            
+
             for i in ranges:
                 selected_files.append(table._rows[i - 1][1:-2])
         except ValueError:
             print(f"Invalid input '{user_input}'. Please enter numbers separated by commas.")
             continue
-        
+
         if not allow_multiples and len(selected_files) > 1:
             print("Multiple selections are not allowed. Please select only one model.")
-            continue  
-        
+            continue
+
         return selected_files
-    
+
 def pull_models(combined, table: PrettyTable|None = None, prompt: str|None = None, allow_multiples: bool = True):
-    if table is None: table = display_models_table(combined)    
+    if table is None: table = display_models_table(combined)
 
     # Call 'select_models()' function and store the result in a list of files to pull
     sel_dirfil = select_models(table, prompt=prompt, allow_multiples=allow_multiples)
-    
+
     for weight in sel_dirfil:
         # construct the model name/path for Ollama.com specifically
         if weight[0] != 'library':
@@ -337,7 +331,7 @@ def migrate_cache_user(table, combined):
     if selected_files == []:
         print("No models selected. Quitting...")
         return
-        
+
     which_direction = input("Move from:\n(1) external to internal\n(2) internal to external\n(1 or 2): ")
     overwrite = input("If the model already exists, should it be overwritten? (y/N): ").lower() in ("y", "yes")
 
@@ -356,15 +350,15 @@ def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_
     for file_path in walk_dir(os.path.join(source_dir, "manifests")):
         # Normalize the file path to use consistent separators
         normalized_path = os.path.normpath(file_path)
-        
+
         # Extract the last three segments of the path
         path_segments = normalized_path.split(os.sep)[-3:]
-        
+
         # Re-join the last two segments and check if this combination is in sel_dirfil
         dir_file_combination = os.sep.join(path_segments)
         if dir_file_combination in sel_dirfil:
             source_files.append(file_path)
-    
+
     for source_file in source_files:
         dest_file = os.path.join(dest_dir, os.sep.join(source_file.split('/models/')[1:]))
 
@@ -382,7 +376,7 @@ def migrate_cache(table: PrettyTable|None = None, combined: list = [], selected_
             print(f"Copied {source_file} to {dest_file}")
         else:
             None
-        
+
         # Now deal with the blobs
         copy_blob_files(source_file=source_file, dest_file=dest_file, source_dir=source_dir, dest_dir=dest_dir, overwrite=overwrite)
 
@@ -404,7 +398,7 @@ def copy_blob_files(source_file, dest_file, source_dir, dest_dir, overwrite):
     else:
         manifest_data.append(rawdata['config']['digest'][bb_px_len:])
         manifest_data.extend([layer['digest'][bb_px_len:] for layer in rawdata['layers']])
-    
+
     for blob_digest in manifest_data:
         source_blob = os.path.join(source_dir, "blobs", blob_hash_prefix + blob_digest)
         dest_blob_dir = os.path.join(dest_dir, "blobs")
@@ -441,7 +435,7 @@ def validate_blob_sha256(dest_blob: str, blob_hash_prefix: str, expected_digest:
             handle_corrupted_file(dest_blob)
     except Exception as e:
         print(f"Error validating blob: {e}")
-    
+
     print(f"Checksum verified: {dest_blob}")
 
 def copy_metadata(src: str, dst: str) -> None:
@@ -489,8 +483,8 @@ def remove_from_cache(combined, table) -> None:
     '''Use the Ollama Python library to remove models from the Ollama cache.
     User is first prompted to remove models from internal, external, or both caches, and the
     the displayed table contains only those models that exist in the selected cache(s).
-    args: 
-        combined  (list): list of tuples containing model names and their corresponding file paths. 
+    args:
+        combined  (list): list of tuples containing model names and their corresponding file paths.
         table  (PrettyTable): PrettyTable object cached in memory containing the table to display
     output: None
     '''
@@ -510,7 +504,7 @@ def remove_from_cache(combined, table) -> None:
             print("Invalid choice. Please try again.")
             continue
         break
-    
+
     # Filter combined list based on user's cache selection
     edit_combined = []
     if 'internal' in caches:
@@ -550,7 +544,7 @@ def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
 
     Parameters:
         word   (str): String to format; can be of any length including zero.
-        emphasis_index   (int, optional): Index of first emphasized char 
+        emphasis_index   (int, optional): Index of first emphasized char
                                         (default is 0).
         emphasis_span   (int, optional): Number of consecutive emphasized chars
                                        after the index (default is 1).
@@ -562,10 +556,10 @@ def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
         TypeError: If word is not a string or both index and span are not integers.
         ValueError: If emphasis_index is outside the bounds of the string.
     """
-    if not isinstance(word, str) or not all(isinstance(arg, int) for arg in 
+    if not isinstance(word, str) or not all(isinstance(arg, int) for arg in
                                         [emphasis_index, emphasis_span]):
         raise TypeError("Word must be a string; emphasis index and span must be integers.")
-    
+
     word = word.strip()
     if len(word) == 0:
         return ""
@@ -578,7 +572,7 @@ def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
         opt += "\033[4;1m" + word[emphasis_index:emphasis_index+emphasis_span] + "\033[0m"
     if emphasis_index + emphasis_span < len(word):
         opt += "\033[1m" + word[emphasis_index+emphasis_span:] + "\033[0m"
-    
+
     return opt
 
 def main_menu():
@@ -619,7 +613,7 @@ def process_choice(choice: str, combined, models_table: PrettyTable|None = None)
     else:
         print("Invalid choice, please try again.")
         return
-    
+
     input("Press return to continue...")
 
 def main() -> None:
