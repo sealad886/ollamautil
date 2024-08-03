@@ -1,6 +1,6 @@
 # OllamaUtil
 
-Additional utilities to work with and manage the Ollama CLI, in particular managing the 
+Additional utilities to work with and manage the Ollama CLI, in particular managing the
 cache when on-device storage is at a premium.
 
 ## Description
@@ -31,7 +31,7 @@ ln -s ${HOME}/ollama_internal/models ${HOME}/.ollama/models
 
 ### Mac vs Windows vs Linux
 
-I have only tested this on MacOS Sonoma 14.4+. It should reasonably work on any POSIX system. 
+I have only tested this on MacOS Sonoma 14.4+. It should reasonably work on any POSIX system.
 
 Symlinks are not available on Windows, so the utility is not recommedned on Windows.
 
@@ -61,10 +61,10 @@ For MacOS, the recommendation is to set `OLLAMAUTIL_FILE_IGNORE` as follows:
 ```bash
 export OLLAMAUTIL_FILE_IGNORE='[".DS_Store"]'
 ```
-Pay close attention to the single- and double-quotes when configuring this or it will break. 
+Pay close attention to the single- and double-quotes when configuring this or it will break.
 This is defaulted in code, but it is not recommended that you rely on this default.
 
-* For `zsh`, add these to your `.zshenv` file. 
+* For `zsh`, add these to your `.zshenv` file.
 * For `bash`, add these to your `.bashrc` file. (I think)
 * For `fish`, add these to your `.config/fish/config.fish` file. (I think)
 
@@ -90,7 +90,7 @@ Q: Quit
 
 ### Optional steps to make execution easier
 If you would prefer to run `ollamautil` from anywhere, I recommend:
-1. Update the shebang in the first line of `ollamautil.py` to point to your virtual environment's Python executable. 
+1. Update the shebang in the first line of `ollamautil.py` to point to your virtual environment's Python executable.
 2. Rename the file: `cp ollamautil.py ollamautil`
 3. Make the file executable: `chmod +x ollamautil`
 4. Optional: move this into your PATH so you don't have to remember where it is: `mv ollamautil /usr/local/bin/ollamautil`
@@ -122,14 +122,14 @@ The `blobs` directory contains all of the model files, organized by model name a
 
 ## Help
 
-* When setting up the environment variables: Pay close attention to the single- and double-quotes when configuring this or it will break. 
+* When setting up the environment variables: Pay close attention to the single- and double-quotes when configuring this or it will break.
 
 ## TODO
 
 1. Check if Ollama models are running / active before allowing any part of the utility to run.
 1. Develop wrapper function for other commands in `ollama` API (via `ollama-python`)
-1. Eventually, maybe even have so much wrapper around this that ollama wouldn't know which cache you used for which models. The user could be presented with all models in the internal/external cache, and then the invoking method could figure out how to handle the symlinks. 
-    1. Only potential issue here would be that you could only have one model running at any given time. 
+1. Eventually, maybe even have so much wrapper around this that ollama wouldn't know which cache you used for which models. The user could be presented with all models in the internal/external cache, and then the invoking method could figure out how to handle the symlinks.
+    1. Only potential issue here would be that you could only have one model running at any given time.
 1. Tab-completion in zsh.
 
 ## Authors
@@ -142,11 +142,15 @@ Contributors names and contact info
 
 ## Version History
 
+* 2.0.0
+    * Completely re-written utility, which first creates a stable internal model of the cache structure before manipulating it
+    * Uses the `ollama-python` library in some places, in particular `ollama.delete()` improves integrity of cache.
+    * No more double-copy of blob files in some cases.
 * 1.1.2
     * Fixed a couple small errors, made code make more sense including menus that quit when you want them to and more input options.
 * 1.1.0
-    * Bunch of new features, including **bulk remove models** from your Ollama cache! Instead of running `ollama rm <long-ollama-name:some-other-tag>`, OllamaUtil now allows you to safely remove models from your cache. 
-    It uses Ollama's 
+    * Bunch of new features, including **bulk remove models** from your Ollama cache! Instead of running `ollama rm <long-ollama-name:some-other-tag>`, OllamaUtil now allows you to safely remove models from your cache.
+    It uses Ollama's
 * 0.1.0
     * Initial Release
 
@@ -170,5 +174,5 @@ Contributors names and contact info
 
 * Thanks to Ollama for creating a great tool for running LLMs.
 * Thanks to the (ollama-python)[https://github.com/ollama/ollama-python] project for the Python API hooks!
-* Thanks to the (llama.cpp)[https://github.com/ggerganov/llama.cpp] project for enabling conversion and quantization of models, and getting me interested in AI tinkering. 
+* Thanks to the (llama.cpp)[https://github.com/ggerganov/llama.cpp] project for enabling conversion and quantization of models, and getting me interested in AI tinkering.
 * Thanks to my previous CS professors--apparently I still know a thing or two, or at least pretend to!
