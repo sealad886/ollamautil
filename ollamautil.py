@@ -487,7 +487,7 @@ def user_select_models(models):
 
 def user_select_cache(curcache, avail_caches):
     for i, av_c in enumerate(avail_caches):
-        print(f"{"*" if cache_type_to_cache(curcache) == av_c else ''}{i+1} {av_c}")
+        print(f"{'*' if cache_type_to_cache(curcache) == av_c else ''}{i+1} {av_c}")
     print("* indicates current cache")
     selected = input("Which cache(s) should models be removed from? (e.g. 1,2,3 or 1-3): ")
     return parse_indices(selected, avail_caches)
