@@ -44,14 +44,17 @@ from contextlib import contextmanager
 VERSION = "2.0.0"
 GITPAGE = "https://github.com/sealad886/ollama_util"
 
+
 def display_welcome() -> None:
     '''
     Print a welcome message and version number to stdout.
     Input: None
     Output: None
     '''
-    welcome_message = f"\033[1;4mOllamaUtil\033[0m (c) 2024\nVersion {VERSION}\nMore info at: {GITPAGE}"
+    welcome_message = f"\033[1;4mOllamaUtil\033[0m (c) 2024" \
+        f"\nVersion {VERSION}\nMore info at: {GITPAGE}"
     print(welcome_message)
+
 
 class Model:
     valid_cache_types = ['internal', 'external']
@@ -59,7 +62,7 @@ class Model:
     def __init__(self, config, layers, library, model, version):
         self.config: dict = config
         self.layers: dict = layers
-        self.caches: List[Tuple[str,str]] = []
+        self.caches: List[Tuple[str, str]] = []
         self.library: str = library
         self.model: str = model
         self.version: str = version
@@ -73,7 +76,7 @@ class Model:
 
     @property
     def manifest(self):
-            return f"{self.library}/{self.model}/{self.version}"
+        return f"{self.library}/{self.model}/{self.version}"
 
     @property
     def size(self):
@@ -87,7 +90,8 @@ class Model:
 
     def add_cache_flag(self, cache: Tuple[str, str]):
         if cache[0] not in self.valid_cache_types:
-            warnings.warn(f'Unable to set invalid cache flag for cache type: {cache}.')
+            warn_text = "Unable to set invalid cache flag for cache type: %s."
+            warnings.warn(warn_text % cache)
             return
         if cache not in self.caches:
             self.caches.append(cache)
@@ -96,14 +100,18 @@ class Model:
         if cache in self.caches:
             self.caches.remove(cache)
         else:
-            warnings.warn(f"Attempted to remove cache flag {cache[0]} from model {self.name}, but that model does not exist in the specified cache.")
+            warnings.warn(f"Attempted to remove cache flag {cache[0]} "
+                          f"from model {self.name}, but model does not exist "
+                          "in the specified cache.")
 
     def is_in_cache(self, cache_str: str = ""):
         if cache_str not in self.valid_cache_types:
-            warnings.warn(f"Attempt to check cache {cache_str} but {cache_str} is not a valid cache type.")
+            warnings.warn(f"Attempt to check cache {cache_str} but "
+                          f"{cache_str} is not a valid cache type.")
             return False
         for cache in self.caches:
-            if cache_str in cache: return True
+            if cache_str in cache:
+                return True
         return False
 
     def to_dict(self):
@@ -132,14 +140,16 @@ class Model:
 
     def get_digests(self):
         '''
-        Return a list of the digest/blod file names to be moved. If the manifest file describes the filenames using a ':' character, this returns the file names using a '-' instead.
+        Return a list of the digest/blod file names to be moved.
+        If the manifest file describes the filenames using a ':'
+        character, this returns the file names using a '-' instead.
         Returns:
             List of digest filenames, replaces ':' with '-'
         '''
         digests = []
-        digests.append(self.config['digest'].replace(':','-'))
+        digests.append(self.config['digest'].replace(':', '-'))
         for layer in self.layers:
-            digests.append(layer['digest'].replace(':','-'))
+            digests.append(layer['digest'].replace(':', '-'))
         return digests
 
     def get_size(self):
@@ -155,6 +165,7 @@ class Model:
     def __str__(self):
         return f"{self.name} ({self.get_size()}): contains {len(self.get_digests())} digests."
 
+
 @contextmanager
 def auto_cache_state():
     original_cache = get_curnow_cache()
@@ -163,10 +174,12 @@ def auto_cache_state():
     finally:
         _toggle_cache(original_cache, silent=True)
 
-def cache_type_to_cache(cache_type: str) -> Tuple[str,str]:
+
+def cache_type_to_cache(cache_type: str) -> Tuple[str, str]:
     return next((cache, path) for cache, path in valid_caches if cache == cache_type)
 
-def get_user_confirmation(prompt:str):
+
+def get_user_confirmation(prompt: str):
     '''
     Prompts the user with a yes/no question and returns True/False based on the response.
 
@@ -188,6 +201,7 @@ def get_user_confirmation(prompt:str):
         else:
             print("Invalid response. Please answer 'yes' or 'no'.")
 
+
 def get_curnow_cache():
     home = os.path.expanduser("~")
     current_path = os.path.realpath(os.path.join(home, '.ollama', 'models'))
@@ -201,21 +215,27 @@ def get_curnow_cache():
 
     return curnow
 
+
 def toggle_cache(skip_conf: bool = False) -> str:
     curnow, curnow_path = get_curnow_cache()
     toggle_to = {
-        'internal': next((cache,path) for cache, path in valid_caches if cache == 'external'),
-        'external': next((cache,path) for cache, path in valid_caches if cache == 'internal')
+        'internal': next((cache, path) for cache, path in valid_caches if cache == 'external'),
+        'external': next((cache, path) for cache, path in valid_caches if cache == 'internal')
     }
 
     print(f"Current Ollama cache set to: {curnow.upper()}.")
-    if skip_conf or get_user_confirmation(f"Would you like to swap symlink to \033[1m{toggle_to[curnow][0].upper()}\033[0m source? (yN): "):
+    prompt = f"Would you like to swap symlink to \033[1m{toggle_to[curnow][0].upper()}\033[0m source? (yN): "
+    if skip_conf or get_user_confirmation(prompt):
         _toggle_cache(toggle_to[curnow])
-    else: print(f"No changes to Ollama cache pointer made. Still using \033[1;4m{curnow.upper()}\033[0m.")
+    else:
+        print(f"No changes to Ollama cache pointer made. Still using \033[1;4m{curnow.upper()}\033[0m.")
 
-def _toggle_cache(toggle_target: Tuple[str, str], *, silent = False) -> str:
+
+def _toggle_cache(toggle_target: Tuple[str, str], *, silent=False) -> str:
     '''
-    WARNING: any calling function should ensure that the cache state is returned to the original state when that function returns
+    WARNING: any calling function should ensure that the cache state is returned
+    to the original state when that function returns.
+    Use decorator @auto_cache_state() where possible
     Change the cache symlinked at $HOME/.ollama.
     '''
     if not is_cache_available(toggle_target):
@@ -223,34 +243,40 @@ def _toggle_cache(toggle_target: Tuple[str, str], *, silent = False) -> str:
         return
     if toggle_target[0] == "internal":
         os.system(f"ln -s -F -f -h {ollama_int_dir} ${{HOME}}/.ollama/models")
-        if not silent: print(f"Changed .ollama symlink to look to INTERNAL drive.")
+        if not silent:
+            print("Changed .ollama symlink to look to INTERNAL drive.")
         return "external"
     elif toggle_target[0] == "external":
         os.system(f"ln -s -F -f -h {ollama_ext_dir} ${{HOME}}/.ollama/models")
-        if not silent: print(f"Changed .ollama symlink to look to EXTERNAL drive.")
+        if not silent:
+            print("Changed .ollama symlink to look to EXTERNAL drive.")
         return "internal"
     else:
         warnings.warn(f'Cache target not toggled. Requested target \'{toggle_target[0]}\' not defined.')
 
-def models_in_cache_list() -> List[Tuple[str,str,str]]:
+
+def models_in_cache_list() -> List[Tuple[str, str, str]]:
     model_list = ollama.list()['models']
     model_names: List[str] = []
     for mod in model_list:
         model_names.append(mod['name'])
-    for i,name in enumerate(model_names):
+    for i, name in enumerate(model_names):
         if "/" in name:
-            fq_library, fq_model = name.split('/',1)
-            fq_model, fq_version = fq_model.split(':',1)
+            fq_library, fq_model = name.split('/', 1)
+            fq_model, fq_version = fq_model.split(':', 1)
         else:
             fq_library = 'library'
-            fq_model, fq_version = name.split(':',1)
+            fq_model, fq_version = name.split(':', 1)
         model_names[i] = (fq_library, fq_model, fq_version)
     return model_names
+
 
 @auto_cache_state()
 def build_model_list(models: List[Model], *, force_rebuild: bool = False) -> list:
     if models != [] and not force_rebuild:
-        warnings.warn(f"Attempted to build_model_list, but the model_list is already built. Use force_rebuild=True if the list should be rebuilt regardless.")
+        warn_text = "Attempted to build_model_list, but the model_list is already built. " \
+            "Use force_rebuild=True if the list should be rebuilt regardless."
+        warnings.warn(warn_text)
         return
     caches = available_caches()
     # print(f'Available caches: {[c[0] for c in caches]}')
@@ -260,7 +286,7 @@ def build_model_list(models: List[Model], *, force_rebuild: bool = False) -> lis
         manifest_path = os.path.join(cache_path, "manifests", "registry.ollama.ai")
         for model in models_in_cache_list():
             try:
-                with open(os.path.join(manifest_path, *model),'r') as man:
+                with open(os.path.join(manifest_path, *model), 'r') as man:
                     manifest = json.load(man)
             except OSError as e:
                 warnings.warn(f"Attempting to read manifest {model}, cached files do not exist.", source=e)
@@ -274,21 +300,25 @@ def build_model_list(models: List[Model], *, force_rebuild: bool = False) -> lis
             pass
             existing_model: Model = next((m for m in models if m == new_model), None)
             if existing_model:
-                existing_model.add_cache_flag((cache,cache_path))
+                existing_model.add_cache_flag((cache, cache_path))
                 skipped_models += 1
             else:
                 models.append(new_model)
 
     return models
 
+
 def is_cache_available(cache_tuple: str) -> bool:
     return os.path.isdir(cache_tuple[1])
 
-def available_caches() -> List[Tuple[str,str]]:
+
+def available_caches() -> List[Tuple[str, str]]:
     available_caches = []
     for cache in valid_caches:
-        if is_cache_available(cache): available_caches.append(cache)
+        if is_cache_available(cache):
+            available_caches.append(cache)
     return available_caches
+
 
 def display_models(models: List[Model]) -> None:
     """
@@ -305,21 +335,24 @@ def display_models(models: List[Model]) -> None:
 
     # Add rows to the table for each model
     for model in models:
-        table.add_row([model.library, model.model, model.version, model.get_size(), model.is_in_cache('internal'), model.is_in_cache('external')])
+        table.add_row([model.library, model.model, model.version,
+                       model.get_size(), model.is_in_cache('internal'),
+                       model.is_in_cache('external')])
 
     table.add_autoindex("No.")
 
     # Print the table
     print(table)
 
+
 def copy_models_cache_to_cache(models: List[Model]):
     def convert_bytes(size):
-            for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
-                if size < 1024.0:
-                    return "%3.1f %s" % (size, x)
-                size /= 1024.0
+        for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+            if size < 1024.0:
+                return "%3.1f %s" % (size, x)
+            size /= 1024.0
 
-            return size
+        return size
     # Step 1: Confirm the current and target caches
     current_cache = get_curnow_cache()
     if len(valid_caches) == 2:
@@ -365,7 +398,8 @@ def copy_models_cache_to_cache(models: List[Model]):
     # Step 4: Confirm transfer details
     print(f"Copying from {current_cache[0]} to {target_cache[0]}.")
     total_size = sum(os.path.getsize(f) for f in files_to_copy)
-    print(f"Total files to copy: {len(files_to_copy)} {f'(excluding {len(existing_files)} existing files)' if not overwrite else ''}")
+    print(f"Total files to copy: {len(files_to_copy)} "
+          f"{f'(excluding {len(existing_files)} existing files)' if not overwrite else ''}")
     print(f"Total size: {convert_bytes(total_size)}")
 
     if not get_user_confirmation("Proceed with the transfer? "):
@@ -391,7 +425,8 @@ def parse_indices(indices: str, models: List) -> List:
         List[Model]: The list of selected models.
     """
     selected = []
-    if indices.lower() == 'all': selected = models
+    if indices.lower() == 'all':
+        selected = models
     else:
         try:
             ranges = indices.split(',')
@@ -479,11 +514,13 @@ def file_hash(file_path: str) -> str:
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+
 def user_select_models(models):
     display_models(models)
     model_indices = input("\nSelect models by index (e.g., 1,2,3 or 1-3): ")
     selected_models = parse_indices(model_indices, models)
     return selected_models
+
 
 def user_select_cache(curcache, avail_caches):
     for i, av_c in enumerate(avail_caches):
@@ -491,6 +528,7 @@ def user_select_cache(curcache, avail_caches):
     print("* indicates current cache")
     selected = input("Which cache(s) should models be removed from? (e.g. 1,2,3 or 1-3): ")
     return parse_indices(selected, avail_caches)
+
 
 @auto_cache_state()
 def remove_model_from_cache(models: List[Model]) -> None:
@@ -533,7 +571,7 @@ def remove_model_from_cache(models: List[Model]) -> None:
     # Remove the selected models
     for cache in selected_caches:
         _toggle_cache(cache)
-        for model in tqdm(selected_models,desc="Deleting models",unit="models",dynamic_ncols=True):
+        for model in tqdm(selected_models, desc="Deleting models", unit="models", dynamic_ncols=True):
             ollama.delete(model.name)
 
         # I think ollama.list() will force the ollama server to do its cleanup activites?
@@ -543,6 +581,7 @@ def remove_model_from_cache(models: List[Model]) -> None:
 
     # Refresh models list after removal
     models = build_model_list(models, force_rebuild=True)
+
 
 def pull_models(models: List[Model]) -> None:
     """
@@ -562,7 +601,9 @@ def pull_models(models: List[Model]) -> None:
         print(f" - {model.name}")
 
     # Confirm with the user before proceeding
-    if not get_user_confirmation("This operation may take some time depending on the number of models and your connection speed.\nAre you sure you want to pull the above models?"):
+    prompt = "This operation may take some time depending on the number of" \
+        "models and your connection speed.\nAre you sure you want to pull the above models?"
+    if not get_user_confirmation(prompt):
         print("Pull operation canceled.")
         return
 
@@ -570,6 +611,7 @@ def pull_models(models: List[Model]) -> None:
         ollama.pull(model.name)
 
     print(f"Pulled {len(selected_models)} models successfully.")
+
 
 def push_models(models: List[Model]) -> None:
     """
@@ -589,7 +631,9 @@ def push_models(models: List[Model]) -> None:
         print(f" - {model.name}")
 
     # Confirm with the user before proceeding
-    if not get_user_confirmation("This operation may take some time depending on the number of models and your connection speed.\nAre you sure you want to push the above models?"):
+    prompt = "This operation may take some time depending on the number " \
+        "of models and your connection speed.\nAre you sure you want to push the above models?"
+    if not get_user_confirmation(prompt):
         print("Push operation canceled.")
         return
 
@@ -597,7 +641,6 @@ def push_models(models: List[Model]) -> None:
         ollama.push(model.name)
 
     print(f"Pushed {len(selected_models)} models successfully.")
-
 
 
 def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
@@ -618,8 +661,7 @@ def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
         TypeError: If word is not a string or both index and span are not integers.
         ValueError: If emphasis_index is outside the bounds of the string.
     """
-    if not isinstance(word, str) or not all(isinstance(arg, int) for arg in
-                                        [emphasis_index, emphasis_span]):
+    if not isinstance(word, str) or not all(isinstance(arg, int) for arg in [emphasis_index, emphasis_span]):
         raise TypeError("Word must be a string; emphasis index and span must be integers.")
 
     word = word.strip()
@@ -637,6 +679,7 @@ def ftStr(word: str, emphasis_index=0, emphasis_span=1) -> str:
 
     return opt
 
+
 def process_choice(choice: str, models: List[Model]):
     choice = choice.lower()
     if choice in ['0', 'd', 'display']:
@@ -652,10 +695,10 @@ def process_choice(choice: str, models: List[Model]):
         print(f"{ftStr('Remove')} from cache: remove one or more model/tag from internal or external cache.")
         remove_model_from_cache(models)
     elif choice in ['4', 'p', 'pull']:
-        print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist. Useful to repair cache that has missing files.")
+        print(f"{ftStr('Pull')} selected models from Ollama.com, will not pull files if they already exist.")
         pull_models(models)
     elif choice in [5, 'u', 'push']:
-        print(f"ftStr('Push',1) selected models to Ollama.com.")
+        print(f"{ftStr('Push', 1)} selected models to Ollama.com.")
         push_models(models)
     elif choice in ['Q', 'q', 'quit']:
         print(f"{ftStr('Quit')} utility, exiting...")
@@ -665,6 +708,7 @@ def process_choice(choice: str, models: List[Model]):
         return
 
     input("Press return to continue...")
+
 
 def main_menu():
     print("\n\033[1mMain Menu\033[0m")
@@ -678,17 +722,28 @@ def main_menu():
     choice = input("Select: ")
     return choice
 
+
 def main() -> None:
     models = []
     build_model_list(models)
     choice = None
     while True:
-        if choice is None: display_welcome()
+        if choice is None:
+            display_welcome()
         choice = main_menu()
         process_choice(choice, models)
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Ollamautil", description="Command line utility to manage the Ollama cache and make it easier to maintain a larger externally cached database and move models on- and off-device. Assumes Ollama defaults on installation (namely ~/.ollama is default directory) is used.\n\nBefore using this utility, you should configure OLLAMAUTIL_INTERNAL_DIR and OLLAMAUTIL_EXTERNAL_DIR to point to the \033[1mmodels/\033[0m directory in your internal and external caches, respectively.]]")
+    parser = argparse.ArgumentParser("Ollamautil",
+                                     description="Command line utility to manage the Ollama cache"
+                                     "and make it easier to maintain a larger externally cached "
+                                     "database and move models on- and off-device. Assumes Ollama "
+                                     "defaults on installation (namely ~/.ollama is default directory) "
+                                     "is used.\n\nBefore using this utility, you should configure "
+                                     "OLLAMAUTIL_INTERNAL_DIR and OLLAMAUTIL_EXTERNAL_DIR to point "
+                                     "to the \033[1mmodels/\033[0m directory in your internal and "
+                                     "external caches, respectively.]]")
     # define the default source directories (no training delimiter)
     # points to path of internal "modules" directory
     global ollama_int_dir
@@ -705,15 +760,15 @@ if __name__ == "__main__":
     try:
         global ollama_file_ignore
         ollama_file_ignore = ast.literal_eval(os.getenv("OLLAMAUTIL_FILE_IGNORE"))
-    except:
+    except OSError:
         print("\033[1mOLLAMAUTIL_FILE_IGNORE not set, using defaults.\033[0m")
         ollama_file_ignore = ['.DS_Store']
     if not ollama_ext_dir or not ollama_int_dir or not ollama_file_ignore:
         print(("Warning: environment variables not configured correctly",
-            f"OLLAMAUTIL_INTERNAL_DIR: {ollama_int_dir}",
-            f"OLLAMAUTIL_EXTERNAL_DIR: {ollama_ext_dir}",
-            f"OLLAMAUTIL_FILE_IGNORE: {ollama_file_ignore} (optional)"
-            "Please configure these before using this utility."))
+               f"OLLAMAUTIL_INTERNAL_DIR: {ollama_int_dir}",
+               f"OLLAMAUTIL_EXTERNAL_DIR: {ollama_ext_dir}",
+               f"OLLAMAUTIL_FILE_IGNORE: {ollama_file_ignore} (optional)"
+               "Please configure these before using this utility."))
         raise RuntimeError.add_note(note="Environment variables not configured correctly. Unable to run utility.")
     FILE_LIST_IGNORE = ollama_file_ignore
 
