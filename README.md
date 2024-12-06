@@ -17,7 +17,8 @@ The utility relies on creating a symlink at `$HOME/.ollama/models` that will the
 your internal and external caches. Make sure you're okay with that.
 
 Move/copy your entire cache to another directory:
-```
+
+```sh
 mkdir -p ${HOME}/ollama_internal/models
 cp -r ${HOME}/.ollama/models/ ${HOME}/ollama_internal/models/
 # run the below command to then remove the previous Ollama cache directory:
@@ -25,7 +26,8 @@ cp -r ${HOME}/.ollama/models/ ${HOME}/ollama_internal/models/
 ```
 
 Create a symlink to your external cache:
-```
+
+```sh
 ln -s ${HOME}/ollama_internal/models ${HOME}/.ollama/models
 ```
 
@@ -38,15 +40,18 @@ Symlinks are not available on Windows, so the utility is not recommedned on Wind
 ### Installing
 
 Clone this repository:
-```
-git clone https://github.com/sealad886/ollama-util.git
-cd /path/to/ollama-util
+
+```sh
+git clone https://github.com/sealad886/ollamautil.git
+cd /path/to/ollamautil
 pip install -U -r requirements.txt
 ```
+
 Note: it is highly recommended that you create a virtual environment that is stable for this utility. For example:
-```
-python -m venv ollama-util
-source ollama-util/bin/activate
+
+```sh
+python -m venv ollamautil
+source ollamautil/bin/activate
 pip install -U -r requirements.txt
 ```
 
