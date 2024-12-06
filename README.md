@@ -50,8 +50,8 @@ pip install -U -r requirements.txt
 Note: it is highly recommended that you create a virtual environment that is stable for this utility. For example:
 
 ```sh
-python -m venv ollamautil
-source ollamautil/bin/activate
+python -m venv ollama-util
+source ollama-util/bin/activate
 pip install -U -r requirements.txt
 ```
 
