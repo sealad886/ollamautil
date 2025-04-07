@@ -1,0 +1,53 @@
+ollama_internal/models/
+├── blobs
+│   ├── sha256-38d7189a09db471519f
+│   ├── sha256-56a0108cced653caaefc073a139e0405c9cacf5dc754627223bb20af4fceb726
+│   ├── sha256-577073ffcc6ce95b9981eacc77d1039568639e5638e83044994560d9ef82ce1b
+│   ├── ...
+│   ├── sha256-fb3b66c7bdf6dabbb2edbc22627f4cb2df021c9e9545b54feafd8a7c09fe8ec5
+├── manifests
+│   ├── registry.ollama.ai
+│   │   ├── library
+│   │   │   ├── codegemma
+│   │   │   │   ├── 7b-code-fp16
+│   │   │   │   ├── 7b-instruct-fp16
+│   │   │   ├── codellama
+│   │   │   │   ├── 70b-code-q2_K
+│   │   │   │   ├── 7b-python
+│   │   │   │   ├── latest
+│   │   │   ├── command-r-plus
+│   │   │   │   ├── latest
+│   │   │   ├── command-r
+│   │   │   │   ├── latest
+│   │   │   ├── deepseek-coder
+│   │   │   │   ├── 6.7b-base-q4_K_M
+│   │   │   ├── gemma
+│   │   │   │   ├── instruct
+│   │   │   ├── llama3
+│   │   │   │   ├── 70b-instruct-q2_k
+│   │   │   ├── mxbai-embed-large
+│   │   │   │   ├── latest
+│   │   │   ├── phi3
+│   │   │   │   ├── 3.8b-mini-instruct-4k-fp16
+│   │   │   ├── phind-codellama
+│   │   │   │   ├── 34b-python-q4_K_M
+│   │   │   ├── snowflake-arctic-embed
+│   │   │   │   ├── latest
+│   │   ├── sealad886
+│   │   │   ├── deepseek-33b
+│   │   │   │   ├── latest
+│   │   │   ├── deepseek-lite
+│   │   │   │   ├── latest
+│   │   │   ├── dolphin-llama3
+│   │   │   │   ├── latest
+│   │   │   ├── eurus
+│   │   │   │   ├── latest
+│   │   │   ├── granite-code
+│   │   │   │   ├── latest
+│   │   │   ├── llama3
+│   │   │   │   ├── 8b-q8
+│   │   │   │   ├── latest
+│   │   │   ├── phi3
+│   │   │   │   ├── latest
+│   │   │   ├── starcoder2
+│   │   │   │   ├── latest
