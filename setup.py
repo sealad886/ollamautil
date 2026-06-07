@@ -5,7 +5,7 @@ with open('README.md', 'r') as f:
 
 setup(
     name='ollamautil',
-    version='0.1.0',
+    version='0.2.0',
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
     install_requires=[
@@ -13,6 +13,7 @@ setup(
         'tqdm',
         'ollama'
     ],
+    python_requires='>=3.10',
     entry_points={
         'console_scripts': [
             'ollamautil=ollamautil.cli:main',
@@ -20,7 +21,7 @@ setup(
     },
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/yourusername/ollamautil',
+    url='https://github.com/sealad886/ollamautil',
     author='Andrew Cox',
     author_email='your.email@example.com',
     license='GPL-3.0',
@@ -31,10 +32,8 @@ setup(
         'Topic :: Utilities',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
     ],
 )

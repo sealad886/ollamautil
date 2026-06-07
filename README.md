@@ -49,9 +49,27 @@ Add these to your `.bashrc`, `.zshrc`, or equivalent to make them permanent.
 
 ## Usage
 
-Start the utility:
+Validate configuration and cache pointers:
 ```bash
-ollamautil
+ollamautil doctor
+ollamautil doctor --json
+```
+
+List configured cache contents:
+```bash
+ollamautil list
+ollamautil list --json
+```
+
+Atomically switch the active Ollama cache:
+```bash
+ollamautil toggle --to internal
+ollamautil toggle --to external
+```
+
+Start the interactive utility:
+```bash
+ollamautil menu
 ```
 
 ### Main Menu Options
@@ -64,8 +82,8 @@ ollamautil
 
 2. **Toggle** - Switch between internal and external cache
    - Shows current cache location
-   - Option to migrate files before switching
-   - Updates symbolic links automatically
+   - Updates `~/.ollama/models` with an atomic symlink replacement
+   - Fails closed if the configured target cache is unavailable
 
 3. **Remove** - Delete models from cache
    - Select models to remove
@@ -98,7 +116,7 @@ pip install -e .
 ```
 3. Run tests:
 ```bash
-python -m unittest tests/test_ollamautil.py
+python -m pytest -q
 ```
 
 ## License

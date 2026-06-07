@@ -1,166 +1,212 @@
-import unittest
+from __future__ import annotations
+
+import hashlib
+import json
 import os
-import shutil
-from unittest.mock import patch
-from src.ollamautil import ollamautil as ollamautil_module # Import the specific module
+from pathlib import Path
 
-class TestOllamaUtil(unittest.TestCase):
+import pytest
 
-    def setUp(self):
-        self.temp_dir = 'temp_test_dir'
-        os.makedirs(self.temp_dir, exist_ok=True)
-        open(os.path.join(self.temp_dir, 'file1.txt'), 'a').close()
-        os.makedirs(os.path.join(self.temp_dir, 'subdir'), exist_ok=True)
-        open(os.path.join(self.temp_dir, 'subdir', 'file2.txt'), 'a').close()
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir)
-
-    def test_walk_dir(self): # Removed mock_ignore argument
-        # Patch FILE_LIST_IGNORE using patch.object within the test
-        with patch.object(ollamautil_module, 'FILE_LIST_IGNORE', ['.DS_Store']):
-            expected_files = sorted([ # Ensure sorted order matches function output
-                os.path.join(self.temp_dir, 'file1.txt'),
-                os.path.join(self.temp_dir, 'subdir', 'file2.txt')
-            ])
-            # Create an ignored file to test the filter
-            open(os.path.join(self.temp_dir, '.DS_Store'), 'a').close()
-            actual_files = ollamautil_module.walk_dir(self.temp_dir)
-            self.assertEqual(actual_files, expected_files)
-
-    def test_get_models_table(self):
-        # Use path-like names as expected by the function
-        combined = [
-            [f'library{os.sep}model1', ['tag1', 'tag2'], ['tag2', 'tag3']],
-            [f'user{os.sep}model2', ['tag4'], ['tag5']]
-        ]
-        table = ollamautil_module.get_models_table(combined)
-        self.assertIsNotNone(table)
-        self.assertEqual(table.title, "Ollama GPTs Installed")
-        self.assertEqual(len(table.rows), 5)  # 3 rows for model1 and 2 rows for model2
-        self.assertEqual(table.field_names, ['No.', 'Lib', 'Model', 'Tag', 'External', 'Internal'])
-
-    def test_build_ext_int_comb_filelist(self): # Removed mock arguments
-        # Use patch.object context managers instead of decorators
-        with patch.object(ollamautil_module, 'ollama_ext_dir', 'mock/external/ollama'), \
-             patch.object(ollamautil_module, 'ollama_int_dir', 'mock/internal/ollama'), \
-             patch.object(ollamautil_module, 'walk_dir') as mock_walk_dir:
-            # Define what walk_dir should return for external and internal paths
-            mock_walk_dir.side_effect = lambda path: {
-                'mock/external/ollama/manifests': [
-                   f'mock/external/ollama/manifests/manifests/library/modelA/tag1', # Added 'manifests'
-                   f'mock/external/ollama/manifests/manifests/library/modelA/tag2', # Added 'manifests'
-                   f'mock/external/ollama/manifests/manifests/user/modelB/latest'  # Added 'manifests'
-               ],
-               'mock/internal/ollama/manifests': [
-                   f'mock/internal/ollama/manifests/manifests/library/modelA/tag2', # Added 'manifests'
-                   f'mock/internal/ollama/manifests/manifests/custom/modelC/v1'   # Added 'manifests'
-               ]
-            }.get(path, [])  # Return empty list if path not matched
-
-            external_dict, internal_dict, combined = ollamautil_module.build_ext_int_comb_filelist()
-
-            print(f"external_dict: {external_dict}") # Debug log
-            print(f"internal_dict: {internal_dict}") # Debug log
-            print(f"combined: {combined}") # Debug log
-            # Assertions based on the mocked walk_dir output
-            expected_external = {
-                'library/modelA': ['tag1', 'tag2'],
-                'user/modelB': ['latest']
-            }
-            expected_internal = {
-                'library/modelA': ['tag2'],
-                'custom/modelC': ['v1']
-            }
-            expected_combined = [
-                ['library/modelA', ['tag1', 'tag2'], ['tag2']],
-                ['user/modelB', ['latest'], []],
-                ['custom/modelC', [], ['v1']]
-            ]
-            # Sort lists within combined for consistent comparison
-            for item in expected_combined:
-                item[1].sort()
-                item[2].sort()
-            for item in combined:
-                item[1].sort()
-                item[2].sort()
-
-            # Sort combined lists by model name for consistent comparison
-            expected_combined.sort(key=lambda x: x[0])
-            combined.sort(key=lambda x: x[0])
-
-            self.assertEqual(external_dict, expected_external)
-            self.assertEqual(internal_dict, expected_internal)
-            self.assertEqual(combined, expected_combined)
-
-    @patch('builtins.input', return_value='yes')
-    def test_get_user_confirmation_yes(self, input):
-        self.assertTrue(ollamautil_module.get_user_confirmation("Test prompt"))
-
-    @patch('builtins.input', return_value='y')
-    def test_get_user_confirmation_y(self, input):
-        self.assertTrue(ollamautil_module.get_user_confirmation("Test prompt"))
-
-    @patch('builtins.input', return_value='no')
-    def test_get_user_confirmation_no(self, input):
-        self.assertFalse(ollamautil_module.get_user_confirmation("Test prompt"))
-
-    @patch('builtins.input', return_value='n')
-    def test_get_user_confirmation_n(self, input):
-        self.assertFalse(ollamautil_module.get_user_confirmation("Test prompt"))
-
-    @patch('builtins.input', side_effect=['maybe', 'yes'])
-    def test_get_user_confirmation_invalid_then_yes(self, input):
-        self.assertTrue(ollamautil_module.get_user_confirmation("Test prompt"))
-
-    def test_get_curnow_cache(self):
-        # Example test case for get_curnow_cache
-        pass
-
-    def test_toggle_int_ext_cache(self):
-        # Example test case for toggle_int_ext_cache
-        pass
-
-    def test_select_models(self):
-        # Example test case for select_models
-        pass
-
-    def test_pull_models(self):
-        # Example test case for pull_models
-        pass
-
-    def test_push_models(self):
-        # Example test case for push_models
-        pass
-
-    def test_migrate_cache_user(self):
-        # Example test case for migrate_cache_user
-        pass
-
-    def test_migrate_cache(self):
-        # Example test case for migrate_cache
-        pass
-
-    def test_copy_blob_files(self):
-        # Example test case for copy_blob_files
-        pass
-
-    def test_validate_blob_sha256(self):
-        # Example test case for validate_blob_sha256
-        pass
-
-    def test_copy_metadata(self):
-        # Example test case for copy_metadata
-        pass
-
-    def test_remove_from_cache(self):
-        # Example test case for remove_from_cache
-        pass
-
-    def test_ftStr(self):
-        # Example test case for ftStr
-        pass
+from ollamautil.cli import main
+from ollamautil.ollamautil import (
+    CacheRef,
+    ModelRef,
+    OllamaUtilConfig,
+    OllamaUtilError,
+    _run_ollama_transfer,
+    _build_remove_paths,
+    _toggle_cache,
+    build_copy_plan,
+    build_ext_int_comb_filelist,
+    build_remove_plan,
+    copy_plan,
+    get_curnow_cache,
+    load_config,
+    parse_model_ref,
+    validate_blob_sha256,
+)
 
 
-if __name__ == '__main__':
-    unittest.main()
+def _digest(content: bytes) -> str:
+    return f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+
+def _blob_name(digest: str) -> str:
+    return digest.replace(":", "-")
+
+
+def _make_cache(root: Path) -> None:
+    (root / "manifests").mkdir(parents=True)
+    (root / "blobs").mkdir()
+
+
+def _write_model(
+    cache: Path,
+    namespace: str = "library",
+    model: str = "llama3",
+    tag: str = "latest",
+    config_blob: bytes = b"config",
+    layer_blob: bytes = b"layer",
+) -> ModelRef:
+    config_digest = _digest(config_blob)
+    layer_digest = _digest(layer_blob)
+    for digest, content in ((config_digest, config_blob), (layer_digest, layer_blob)):
+        (cache / "blobs" / _blob_name(digest)).write_bytes(content)
+    manifest = {
+        "config": {"digest": config_digest, "size": len(config_blob)},
+        "layers": [{"digest": layer_digest, "size": len(layer_blob), "mediaType": "application/vnd.ollama.image"}],
+    }
+    manifest_path = cache / "manifests" / "registry.ollama.ai" / namespace / model / tag
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return ModelRef("registry.ollama.ai", namespace, model, tag)
+
+
+@pytest.fixture()
+def fake_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> OllamaUtilConfig:
+    internal = tmp_path / "internal"
+    external = tmp_path / "external"
+    home = tmp_path / "home"
+    _make_cache(internal)
+    _make_cache(external)
+    (home / ".ollama").mkdir(parents=True)
+    os.symlink(internal, home / ".ollama" / "models")
+    monkeypatch.setenv("OLLAMAUTIL_INTERNAL_DIR", str(internal))
+    monkeypatch.setenv("OLLAMAUTIL_EXTERNAL_DIR", str(external))
+    monkeypatch.setenv("OLLAMAUTIL_HOME", str(home))
+    monkeypatch.setenv("OLLAMAUTIL_FILE_IGNORE", '[".DS_Store"]')
+    return load_config()
+
+
+def test_load_config_uses_env_and_discovers_real_manifest(fake_config: OllamaUtilConfig) -> None:
+    _write_model(fake_config.internal.path)
+    external, internal, combined = build_ext_int_comb_filelist(fake_config)
+
+    assert external == {}
+    assert internal == {"library/llama3": ["latest"]}
+    assert combined == [["library/llama3", [], ["latest"]]]
+    assert get_curnow_cache(fake_config) == "internal"
+
+
+def test_parse_model_ref_is_relative_to_manifest_root(fake_config: OllamaUtilConfig) -> None:
+    ref = _write_model(fake_config.internal.path, namespace="sealad886", model="custom", tag="v1")
+    manifest = fake_config.internal.manifests_dir / ref.manifest_relpath
+
+    parsed = parse_model_ref(manifest, fake_config.internal.manifests_dir)
+
+    assert parsed == ref
+    assert parsed.table_key == "sealad886/custom"
+    assert parsed.api_name == "sealad886/custom:v1"
+
+
+def test_toggle_cache_replaces_symlink_atomically(fake_config: OllamaUtilConfig) -> None:
+    result = _toggle_cache("external", config=fake_config, silent=True)
+
+    assert result == "external"
+    assert fake_config.models_link.is_symlink()
+    assert fake_config.models_link.resolve(strict=True) == fake_config.external.path
+    assert get_curnow_cache(fake_config) == "external"
+
+
+def test_copy_plan_copies_manifest_and_blobs_with_checksum(fake_config: OllamaUtilConfig) -> None:
+    ref = _write_model(fake_config.internal.path)
+    plan = build_copy_plan([ref], fake_config.internal, fake_config.external)
+
+    copy_plan(plan)
+
+    assert (fake_config.external.manifests_dir / ref.manifest_relpath).exists()
+    for item in plan.items:
+        assert item.dest.exists()
+        if item.expected_digest:
+            validate_blob_sha256(str(item.dest), expected_digest=item.expected_digest)
+
+
+def test_copy_plan_refuses_bad_blob_digest(fake_config: OllamaUtilConfig) -> None:
+    ref = _write_model(fake_config.internal.path)
+    bad_digest = _digest(b"wrong")
+    manifest_path = fake_config.internal.manifests_dir / ref.manifest_relpath
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["layers"][0]["digest"] = bad_digest
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (fake_config.internal.blobs_dir / _blob_name(bad_digest)).write_bytes(b"not wrong")
+    plan = build_copy_plan([ref], fake_config.internal, fake_config.external)
+
+    with pytest.raises(OllamaUtilError, match="Digest mismatch"):
+        copy_plan(plan)
+
+    assert not (fake_config.external.blobs_dir / _blob_name(bad_digest)).exists()
+
+
+def test_remove_plan_is_explicit_and_cache_scoped(fake_config: OllamaUtilConfig) -> None:
+    ref = _write_model(fake_config.internal.path)
+    selection = [["library", "llama3", "latest"]]
+
+    plan = build_remove_plan(selection, ["internal", "external"], config=fake_config)
+
+    assert plan == [(fake_config.internal, ref, fake_config.internal.manifests_dir / ref.manifest_relpath)]
+
+
+def test_remove_paths_keep_blobs_referenced_by_other_manifests(fake_config: OllamaUtilConfig) -> None:
+    ref = _write_model(fake_config.internal.path)
+    shared_ref = _write_model(fake_config.internal.path, model="llama3-copy")
+    plan = [(fake_config.internal, ref, fake_config.internal.manifests_dir / ref.manifest_relpath)]
+
+    remove_paths = _build_remove_paths(plan)
+
+    assert fake_config.internal.manifests_dir / ref.manifest_relpath in remove_paths
+    assert fake_config.internal.manifests_dir / shared_ref.manifest_relpath not in remove_paths
+    assert all(path.parent != fake_config.internal.blobs_dir for path in remove_paths)
+
+
+def test_remove_paths_include_unreferenced_blobs(fake_config: OllamaUtilConfig) -> None:
+    ref = _write_model(fake_config.internal.path, layer_blob=b"unique-layer")
+    plan = [(fake_config.internal, ref, fake_config.internal.manifests_dir / ref.manifest_relpath)]
+
+    remove_paths = _build_remove_paths(plan)
+
+    assert fake_config.internal.manifests_dir / ref.manifest_relpath in remove_paths
+    assert any(path.parent == fake_config.internal.blobs_dir for path in remove_paths)
+
+
+def test_cli_list_json_uses_configured_dirs(fake_config: OllamaUtilConfig, capsys: pytest.CaptureFixture[str]) -> None:
+    _write_model(fake_config.internal.path)
+
+    assert main(["list", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["internal"] == {"library/llama3": ["latest"]}
+    assert payload["external"] == {}
+    assert payload["current_cache"] == "internal"
+
+
+def test_ollama_transfer_consumes_streaming_progress(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    events = [
+        {"status": "pulling manifest"},
+        {"status": "downloading", "completed": 1, "total": 2},
+        {"status": "success"},
+    ]
+
+    def fake_pull(model_name: str, stream: bool = False):
+        assert model_name == "llama3:latest"
+        assert stream is True
+        return iter(events)
+
+    monkeypatch.setattr("ollamautil.ollamautil.ollama.pull", fake_pull)
+
+    _run_ollama_transfer("pull", ["llama3:latest"])
+
+    out = capsys.readouterr().out
+    assert "llama3:latest: pulling manifest" in out
+    assert "llama3:latest: downloading 1/2" in out
+
+
+def test_validate_config_rejects_missing_structure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    internal = tmp_path / "internal"
+    external = tmp_path / "external"
+    internal.mkdir()
+    external.mkdir()
+    monkeypatch.setenv("OLLAMAUTIL_INTERNAL_DIR", str(internal))
+    monkeypatch.setenv("OLLAMAUTIL_EXTERNAL_DIR", str(external))
+
+    with pytest.raises(OllamaUtilError, match="missing required directory"):
+        load_config()
