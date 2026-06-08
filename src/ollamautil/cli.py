@@ -9,6 +9,7 @@ from prettytable import PrettyTable
 from .ollamautil import (
     OllamaUtilError,
     build_ext_int_comb_filelist,
+    cache_statuses,
     display_models_table,
     get_curnow_cache,
     load_config,
@@ -17,7 +18,6 @@ from .ollamautil import (
     push_models,
     remove_from_cache,
     toggle_int_ext_cache,
-    validate_config,
     _toggle_cache,
 )
 from .utils import ftStr
@@ -73,10 +73,16 @@ def run_menu() -> int:
 
 def run_doctor(args: argparse.Namespace) -> int:
     config = load_config()
-    validate_config(config)
+    statuses = cache_statuses(config)
     payload = {
-        "internal": str(config.internal.path),
-        "external": str(config.external.path),
+        "caches": {
+            name: {
+                "path": str(status.path),
+                "available": status.available,
+                "error": status.error,
+            }
+            for name, status in statuses.items()
+        },
         "models_link": str(config.models_link),
         "current_cache": get_curnow_cache(config),
         "file_ignore": list(config.file_ignore),
@@ -91,6 +97,7 @@ def run_doctor(args: argparse.Namespace) -> int:
 
 def run_list(args: argparse.Namespace) -> int:
     config = load_config()
+    statuses = cache_statuses(config)
     external, internal, combined = build_ext_int_comb_filelist(config)
     if args.json:
         print(
@@ -99,6 +106,14 @@ def run_list(args: argparse.Namespace) -> int:
                     "external": external,
                     "internal": internal,
                     "current_cache": get_curnow_cache(config),
+                    "caches": {
+                        name: {
+                            "path": str(status.path),
+                            "available": status.available,
+                            "error": status.error,
+                        }
+                        for name, status in statuses.items()
+                    },
                 },
                 indent=2,
                 sort_keys=True,

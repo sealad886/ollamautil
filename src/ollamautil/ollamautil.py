@@ -36,6 +36,14 @@ class CacheRef:
 
 
 @dataclass(frozen=True)
+class CacheStatus:
+    name: CacheName
+    path: Path
+    available: bool
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class OllamaUtilConfig:
     internal: CacheRef
     external: CacheRef
@@ -115,7 +123,7 @@ def _parse_ignore(raw: str | None) -> tuple[str, ...]:
     return (".DS_Store",)
 
 
-def load_config(*, require_env: bool = True, validate: bool = True) -> OllamaUtilConfig:
+def load_config(*, require_env: bool = True, validate: bool = False) -> OllamaUtilConfig:
     internal_raw = os.getenv("OLLAMAUTIL_INTERNAL_DIR")
     external_raw = os.getenv("OLLAMAUTIL_EXTERNAL_DIR")
     missing = [
@@ -145,15 +153,31 @@ def load_config(*, require_env: bool = True, validate: bool = True) -> OllamaUti
 
 def validate_config(config: OllamaUtilConfig) -> None:
     for cache in config.caches:
-        if not cache.path.exists():
-            raise OllamaUtilError(f"{cache.name} cache does not exist: {cache.path}")
-        if not cache.path.is_dir():
-            raise OllamaUtilError(f"{cache.name} cache is not a directory: {cache.path}")
-        for child in (cache.manifests_dir, cache.blobs_dir):
-            if not child.exists():
-                raise OllamaUtilError(f"{cache.name} cache missing required directory: {child}")
-            if not child.is_dir():
-                raise OllamaUtilError(f"{cache.name} cache child is not a directory: {child}")
+        validate_cache(cache)
+
+
+def validate_cache(cache: CacheRef) -> None:
+    if not cache.path.exists():
+        raise OllamaUtilError(f"{cache.name} cache does not exist: {cache.path}")
+    if not cache.path.is_dir():
+        raise OllamaUtilError(f"{cache.name} cache is not a directory: {cache.path}")
+    for child in (cache.manifests_dir, cache.blobs_dir):
+        if not child.exists():
+            raise OllamaUtilError(f"{cache.name} cache missing required directory: {child}")
+        if not child.is_dir():
+            raise OllamaUtilError(f"{cache.name} cache child is not a directory: {child}")
+
+
+def cache_status(cache: CacheRef) -> CacheStatus:
+    try:
+        validate_cache(cache)
+    except OllamaUtilError as exc:
+        return CacheStatus(name=cache.name, path=cache.path, available=False, error=str(exc))
+    return CacheStatus(name=cache.name, path=cache.path, available=True)
+
+
+def cache_statuses(config: OllamaUtilConfig) -> dict[CacheName, CacheStatus]:
+    return {cache.name: cache_status(cache) for cache in config.caches}
 
 
 def walk_dir(directory: str | Path, ignore: Iterable[str] | None = None) -> list[str]:
@@ -198,6 +222,8 @@ def parse_model_ref(manifest_file: str | Path, manifests_root: str | Path) -> Mo
 
 
 def _models_for_cache(cache: CacheRef, ignore: Iterable[str]) -> dict[str, list[str]]:
+    if not cache_status(cache).available:
+        return {}
     models: dict[str, list[str]] = {}
     for manifest_file in walk_dir(cache.manifests_dir, ignore=ignore):
         try:
@@ -324,7 +350,7 @@ def _toggle_cache(
     else:
         target_name = toggle_target
     target = config.cache(target_name)
-    validate_config(config)
+    validate_cache(target)
     link = config.models_link
     if link.exists() and not link.is_symlink():
         raise OllamaUtilError(f"Refusing to replace non-symlink models path: {link}")
@@ -526,6 +552,8 @@ def build_copy_plan(
     *,
     overwrite: bool = False,
 ) -> CopyPlan:
+    validate_cache(source_cache)
+    validate_cache(dest_cache)
     items: list[CopyItem] = []
     refs = tuple(model_refs)
     for ref in refs:
@@ -664,6 +692,7 @@ def build_remove_plan(
     plan: list[tuple[CacheRef, ModelRef, Path]] = []
     for cache_name in cache_names:
         cache = config.cache(cache_name)
+        validate_cache(cache)
         for selection in selections:
             ref = _model_ref_from_table_selection(selection)
             manifest = cache.manifests_dir / ref.manifest_relpath

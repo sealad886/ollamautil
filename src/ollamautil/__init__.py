@@ -1,6 +1,7 @@
 from .cli import main
 from .ollamautil import (
     CacheRef,
+    CacheStatus,
     CopyPlan,
     ModelRef,
     OllamaUtilConfig,
@@ -8,6 +9,8 @@ from .ollamautil import (
     build_copy_plan,
     build_ext_int_comb_filelist,
     build_remove_plan,
+    cache_status,
+    cache_statuses,
     copy_plan,
     display_models_table,
     get_curnow_cache,
@@ -18,6 +21,7 @@ from .ollamautil import (
     remove_from_cache,
     toggle_int_ext_cache,
     validate_blob_sha256,
+    validate_cache,
     validate_config,
     walk_dir,
 )
@@ -25,6 +29,7 @@ from .utils import ftStr
 
 __all__ = [
     "CacheRef",
+    "CacheStatus",
     "CopyPlan",
     "ModelRef",
     "OllamaUtilConfig",
@@ -32,6 +37,8 @@ __all__ = [
     "build_copy_plan",
     "build_ext_int_comb_filelist",
     "build_remove_plan",
+    "cache_status",
+    "cache_statuses",
     "copy_plan",
     "display_models_table",
     "ftStr",
@@ -44,6 +51,7 @@ __all__ = [
     "remove_from_cache",
     "toggle_int_ext_cache",
     "validate_blob_sha256",
+    "validate_cache",
     "validate_config",
     "walk_dir",
 ]

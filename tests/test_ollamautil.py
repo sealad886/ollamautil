@@ -19,11 +19,13 @@ from ollamautil.ollamautil import (
     build_copy_plan,
     build_ext_int_comb_filelist,
     build_remove_plan,
+    cache_status,
     copy_plan,
     get_curnow_cache,
     load_config,
     parse_model_ref,
     validate_blob_sha256,
+    validate_cache,
 )
 
 
@@ -209,4 +211,62 @@ def test_validate_config_rejects_missing_structure(tmp_path: Path, monkeypatch: 
     monkeypatch.setenv("OLLAMAUTIL_EXTERNAL_DIR", str(external))
 
     with pytest.raises(OllamaUtilError, match="missing required directory"):
-        load_config()
+        load_config(validate=True)
+
+
+def test_doctor_reports_offline_external_without_failing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    internal = tmp_path / "internal"
+    external = tmp_path / "missing-external"
+    home = tmp_path / "home"
+    _make_cache(internal)
+    (home / ".ollama").mkdir(parents=True)
+    os.symlink(internal, home / ".ollama" / "models")
+    monkeypatch.setenv("OLLAMAUTIL_INTERNAL_DIR", str(internal))
+    monkeypatch.setenv("OLLAMAUTIL_EXTERNAL_DIR", str(external))
+    monkeypatch.setenv("OLLAMAUTIL_HOME", str(home))
+
+    assert main(["doctor", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["current_cache"] == "internal"
+    assert payload["caches"]["internal"]["available"] is True
+    assert payload["caches"]["external"]["available"] is False
+    assert "does not exist" in payload["caches"]["external"]["error"]
+
+
+def test_list_skips_offline_external_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    internal = tmp_path / "internal"
+    external = tmp_path / "missing-external"
+    home = tmp_path / "home"
+    _make_cache(internal)
+    _write_model(internal)
+    (home / ".ollama").mkdir(parents=True)
+    os.symlink(internal, home / ".ollama" / "models")
+    monkeypatch.setenv("OLLAMAUTIL_INTERNAL_DIR", str(internal))
+    monkeypatch.setenv("OLLAMAUTIL_EXTERNAL_DIR", str(external))
+    monkeypatch.setenv("OLLAMAUTIL_HOME", str(home))
+
+    assert main(["list", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["internal"] == {"library/llama3": ["latest"]}
+    assert payload["external"] == {}
+    assert payload["caches"]["external"]["available"] is False
+
+
+def test_mutating_target_still_rejects_offline_cache(fake_config: OllamaUtilConfig, tmp_path: Path) -> None:
+    offline = CacheRef("external", tmp_path / "offline-external")
+
+    with pytest.raises(OllamaUtilError, match="does not exist"):
+        validate_cache(offline)
+    assert cache_status(offline).available is False
+    with pytest.raises(OllamaUtilError, match="does not exist"):
+        build_copy_plan([], fake_config.internal, offline)
